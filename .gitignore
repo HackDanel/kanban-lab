@@ -1,0 +1,36 @@
+# env
+.env
+.env.*
+!.env.example
+
+# go
+backend/bin/
+backend/tmp/
+*.test
+coverage.out
+coverage.html
+gobco*.json
+
+# node
+node_modules/
+dist/
+frontend/coverage/
+
+# tests
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+e2e/.auth/
+tests/postman/reports/
+tests/load/results/
+tests/security/reports/
+
+# runtime data
+uploads/
+backups/
+
+# editors / os
+.idea/
+.vscode/
+*.swp
+.DS_Store

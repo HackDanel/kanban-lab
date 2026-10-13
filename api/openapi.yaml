@@ -1,0 +1,1742 @@
+openapi: 3.0.3
+info:
+  title: Kanban Lab API
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    REST API Kanban-доски (аналог Jira).
+
+    Аутентификация: access JWT в заголовке `Authorization: Bearer <token>`.
+    Refresh-токен хранится в httpOnly-cookie `refresh_token` и ротируется при каждом
+    обновлении. Запросы `/auth/refresh` и `/auth/logout` требуют заголовок
+    `X-CSRF-Token`, равный значению cookie `csrf_token`.
+
+    Real-time: `GET /api/v1/ws?boardId=<uuid>&token=<access JWT>` открывает WebSocket,
+    по которому сервер присылает события доски в формате
+    `{"type": "card.moved", "boardId": "...", "payload": {...}}`.
+servers:
+  - url: /api/v1
+tags:
+  - name: auth
+    description: Регистрация, вход, выход, обновление токена
+  - name: users
+    description: Пользователи и роли
+  - name: projects
+    description: Проекты и их участники
+  - name: boards
+    description: Kanban-доски проекта
+  - name: columns
+    description: Колонки доски, порядок и WIP-лимиты
+  - name: cards
+    description: Карточки, перемещение, фильтрация, история
+  - name: labels
+    description: Метки проекта
+  - name: comments
+    description: Комментарии к карточкам
+  - name: attachments
+    description: Вложения карточек
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Регистрация нового пользователя (роль developer)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Вход по email и паролю
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Access-токен в теле, refresh-токен и CSRF-токен в cookie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshToken
+      summary: Обновление access-токена по refresh-cookie
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: Новая пара токенов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Выход, отзыв refresh-токена
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Сессия завершена
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Текущий пользователь
+      responses:
+        "200":
+          description: Профиль
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: Список пользователей (для выбора исполнителя и администрирования)
+      parameters:
+        - name: q
+          in: query
+          description: Поиск по имени или email
+          schema:
+            type: string
+            maxLength: 100
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Страница пользователей
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /users/{userId}/role:
+    put:
+      tags: [users]
+      operationId: setUserRole
+      summary: Изменить роль пользователя (только администратор)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetRoleRequest"
+      responses:
+        "200":
+          description: Роль изменена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects:
+    get:
+      tags: [projects]
+      operationId: listProjects
+      summary: Проекты, доступные текущему пользователю
+      responses:
+        "200":
+          description: Список проектов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [projects]
+      operationId: createProject
+      summary: Создать проект (администратор, менеджер)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Проект создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [projects]
+      operationId: getProject
+      summary: Проект
+      responses:
+        "200":
+          description: Проект
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [projects]
+      operationId: updateProject
+      summary: Изменить проект (администратор, менеджер-владелец)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPatch"
+      responses:
+        "200":
+          description: Проект изменён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [projects]
+      operationId: deleteProject
+      summary: Удалить проект (администратор, менеджер-владелец)
+      responses:
+        "204":
+          description: Проект удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{projectId}/members:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [projects]
+      operationId: listProjectMembers
+      summary: Участники проекта
+      responses:
+        "200":
+          description: Участники
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [projects]
+      operationId: addProjectMember
+      summary: Добавить участника (администратор, менеджер-владелец)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMemberRequest"
+      responses:
+        "204":
+          description: Участник добавлен
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{projectId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/UserId"
+    delete:
+      tags: [projects]
+      operationId: removeProjectMember
+      summary: Исключить участника (администратор, менеджер-владелец)
+      responses:
+        "204":
+          description: Участник исключён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{projectId}/boards:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [boards]
+      operationId: listBoards
+      summary: Доски проекта
+      responses:
+        "200":
+          description: Список досок
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Board"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [boards]
+      operationId: createBoard
+      summary: Создать доску (администратор, менеджер). Создаются колонки To Do, In Progress, Done
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BoardInput"
+      responses:
+        "201":
+          description: Доска создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{projectId}/labels:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [labels]
+      operationId: listLabels
+      summary: Метки проекта
+      responses:
+        "200":
+          description: Список меток
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Label"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [labels]
+      operationId: createLabel
+      summary: Создать метку (администратор, менеджер)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabelInput"
+      responses:
+        "201":
+          description: Метка создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Label"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /labels/{labelId}:
+    parameters:
+      - $ref: "#/components/parameters/LabelId"
+    patch:
+      tags: [labels]
+      operationId: updateLabel
+      summary: Изменить метку (администратор, менеджер)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LabelPatch"
+      responses:
+        "200":
+          description: Метка изменена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Label"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [labels]
+      operationId: deleteLabel
+      summary: Удалить метку (администратор, менеджер)
+      responses:
+        "204":
+          description: Метка удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}:
+    parameters:
+      - $ref: "#/components/parameters/BoardId"
+    get:
+      tags: [boards]
+      operationId: getBoard
+      summary: Доска с колонками
+      responses:
+        "200":
+          description: Доска
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [boards]
+      operationId: updateBoard
+      summary: Переименовать доску (администратор, менеджер)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BoardInput"
+      responses:
+        "200":
+          description: Доска изменена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Board"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [boards]
+      operationId: deleteBoard
+      summary: Удалить доску (администратор, менеджер)
+      responses:
+        "204":
+          description: Доска удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/columns:
+    parameters:
+      - $ref: "#/components/parameters/BoardId"
+    post:
+      tags: [columns]
+      operationId: createColumn
+      summary: Создать колонку в конце доски (администратор, менеджер)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ColumnInput"
+      responses:
+        "201":
+          description: Колонка создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Column"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/cards:
+    parameters:
+      - $ref: "#/components/parameters/BoardId"
+    get:
+      tags: [cards]
+      operationId: listCards
+      summary: Карточки доски с фильтрацией и поиском
+      parameters:
+        - name: q
+          in: query
+          description: Поиск по названию и описанию
+          schema:
+            type: string
+            maxLength: 200
+        - name: columnId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: assigneeId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: labelId
+          in: query
+          description: Карточка должна иметь каждую из перечисленных меток
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 20
+            items:
+              type: string
+              format: uuid
+        - name: priority
+          in: query
+          schema:
+            $ref: "#/components/schemas/Priority"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Страница карточек, отсортированных по колонке и позиции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /columns/{columnId}:
+    parameters:
+      - $ref: "#/components/parameters/ColumnId"
+    patch:
+      tags: [columns]
+      operationId: updateColumn
+      summary: Переименовать колонку или изменить WIP-лимит (администратор, менеджер)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ColumnPatch"
+      responses:
+        "200":
+          description: Колонка изменена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Column"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [columns]
+      operationId: deleteColumn
+      summary: Удалить пустую колонку (администратор, менеджер)
+      responses:
+        "204":
+          description: Колонка удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: В колонке есть карточки (`COLUMN_NOT_EMPTY`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /columns/{columnId}/move:
+    parameters:
+      - $ref: "#/components/parameters/ColumnId"
+    post:
+      tags: [columns]
+      operationId: moveColumn
+      summary: Изменить порядок колонок (администратор, менеджер)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveColumnRequest"
+      responses:
+        "200":
+          description: Колонка перемещена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Column"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /columns/{columnId}/cards:
+    parameters:
+      - $ref: "#/components/parameters/ColumnId"
+    post:
+      tags: [cards]
+      operationId: createCard
+      summary: Создать карточку в конце колонки
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardInput"
+      responses:
+        "201":
+          description: Карточка создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/WipLimitExceeded"
+
+  /cards/{cardId}:
+    parameters:
+      - $ref: "#/components/parameters/CardId"
+    get:
+      tags: [cards]
+      operationId: getCard
+      summary: Карточка
+      responses:
+        "200":
+          description: Карточка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [cards]
+      operationId: updateCard
+      summary: Изменить поля карточки
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardPatch"
+      responses:
+        "200":
+          description: Карточка изменена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [cards]
+      operationId: deleteCard
+      summary: Удалить карточку
+      responses:
+        "204":
+          description: Карточка удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cards/{cardId}/move:
+    parameters:
+      - $ref: "#/components/parameters/CardId"
+    post:
+      tags: [cards]
+      operationId: moveCard
+      summary: Переместить карточку в колонку и позицию с проверкой WIP-лимита
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveCardRequest"
+      responses:
+        "200":
+          description: Карточка перемещена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/WipLimitExceeded"
+
+  /cards/{cardId}/activity:
+    parameters:
+      - $ref: "#/components/parameters/CardId"
+    get:
+      tags: [cards]
+      operationId: listCardActivity
+      summary: История изменений карточки, новые записи первыми
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Записи истории
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Activity"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cards/{cardId}/comments:
+    parameters:
+      - $ref: "#/components/parameters/CardId"
+    get:
+      tags: [comments]
+      operationId: listComments
+      summary: Комментарии карточки
+      responses:
+        "200":
+          description: Комментарии по возрастанию времени
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Comment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [comments]
+      operationId: createComment
+      summary: Добавить комментарий
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentInput"
+      responses:
+        "201":
+          description: Комментарий добавлен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /comments/{commentId}:
+    parameters:
+      - $ref: "#/components/parameters/CommentId"
+    patch:
+      tags: [comments]
+      operationId: updateComment
+      summary: Изменить свой комментарий
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentInput"
+      responses:
+        "200":
+          description: Комментарий изменён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [comments]
+      operationId: deleteComment
+      summary: Удалить комментарий (автор, администратор, менеджер)
+      responses:
+        "204":
+          description: Комментарий удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cards/{cardId}/attachments:
+    parameters:
+      - $ref: "#/components/parameters/CardId"
+    get:
+      tags: [attachments]
+      operationId: listAttachments
+      summary: Вложения карточки
+      responses:
+        "200":
+          description: Вложения
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attachment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [attachments]
+      operationId: uploadAttachment
+      summary: Загрузить вложение
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Вложение загружено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attachment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          description: Файл больше допустимого размера (`FILE_TOO_LARGE`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "415":
+          description: Недопустимый тип файла (`UNSUPPORTED_MEDIA_TYPE`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /attachments/{attachmentId}:
+    parameters:
+      - $ref: "#/components/parameters/AttachmentId"
+    delete:
+      tags: [attachments]
+      operationId: deleteAttachment
+      summary: Удалить вложение (загрузивший, администратор, менеджер)
+      responses:
+        "204":
+          description: Вложение удалено
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /attachments/{attachmentId}/download:
+    parameters:
+      - $ref: "#/components/parameters/AttachmentId"
+    get:
+      tags: [attachments]
+      operationId: downloadAttachment
+      summary: Скачать файл вложения
+      responses:
+        "200":
+          description: "Содержимое файла, отдаётся с `Content-Disposition: attachment`"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BoardId:
+      name: boardId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ColumnId:
+      name: columnId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CardId:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LabelId:
+      name: labelId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CommentId:
+      name: commentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AttachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Ошибка валидации (`VALIDATION_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Нет или недействителен токен (`UNAUTHORIZED`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Недостаточно прав (`FORBIDDEN`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Объект не найден (`NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Конфликт уникальности (`CONFLICT`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    WipLimitExceeded:
+      description: Превышен WIP-лимит целевой колонки (`WIP_LIMIT_EXCEEDED`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: Превышен лимит запросов (`RATE_LIMITED`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: title
+        message:
+          type: string
+          example: Название обязательно
+
+    Role:
+      type: string
+      enum: [admin, manager, developer]
+
+    Priority:
+      type: string
+      enum: [low, medium, high, critical]
+
+    User:
+      type: object
+      required: [id, email, name, role, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        createdAt:
+          type: string
+          format: date-time
+
+    UserPage:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total:
+          type: integer
+
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 1
+          maxLength: 72
+
+    AuthResponse:
+      type: object
+      required: [accessToken, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Время жизни access-токена в секундах
+        user:
+          $ref: "#/components/schemas/User"
+
+    SetRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+
+    Project:
+      type: object
+      required: [id, key, name, description, ownerId, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          example: KAN
+        name:
+          type: string
+        description:
+          type: string
+        ownerId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProjectInput:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+          pattern: "^[A-Z][A-Z0-9]{1,9}$"
+          description: Короткий ключ проекта, префикс номеров задач
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+
+    ProjectPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+
+    AddMemberRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          format: uuid
+
+    Board:
+      type: object
+      required: [id, projectId, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BoardDetail:
+      allOf:
+        - $ref: "#/components/schemas/Board"
+        - type: object
+          required: [columns]
+          properties:
+            columns:
+              type: array
+              items:
+                $ref: "#/components/schemas/Column"
+
+    BoardInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    Column:
+      type: object
+      required: [id, boardId, name, position, cardCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        boardId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        position:
+          type: number
+          format: double
+        wipLimit:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Максимум карточек в колонке; null — без ограничения
+        cardCount:
+          type: integer
+
+    ColumnInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        wipLimit:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 1000
+
+    ColumnPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        wipLimit:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 1000
+
+    MoveColumnRequest:
+      type: object
+      properties:
+        afterColumnId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Колонка, после которой поставить; null — в начало
+
+    Label:
+      type: object
+      required: [id, projectId, name, color]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          example: "#1976d2"
+
+    LabelInput:
+      type: object
+      required: [name, color]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+
+    LabelPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+
+    Card:
+      type: object
+      required:
+        - id
+        - boardId
+        - columnId
+        - number
+        - title
+        - description
+        - priority
+        - position
+        - labelIds
+        - reporterId
+        - commentCount
+        - attachmentCount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        boardId:
+          type: string
+          format: uuid
+        columnId:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          description: Порядковый номер задачи внутри проекта
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          $ref: "#/components/schemas/Priority"
+        position:
+          type: number
+          format: double
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        reporterId:
+          type: string
+          format: uuid
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        labelIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        commentCount:
+          type: integer
+        attachmentCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CardPage:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+        total:
+          type: integer
+
+    CardInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 10000
+        priority:
+          $ref: "#/components/schemas/Priority"
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        labelIds:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
+
+    CardPatch:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 10000
+        priority:
+          $ref: "#/components/schemas/Priority"
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        labelIds:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
+
+    MoveCardRequest:
+      type: object
+      required: [columnId]
+      properties:
+        columnId:
+          type: string
+          format: uuid
+        afterCardId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Карточка, после которой поставить; null — в начало колонки
+
+    Comment:
+      type: object
+      required: [id, cardId, authorId, body, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        cardId:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CommentInput:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+
+    Attachment:
+      type: object
+      required: [id, cardId, uploaderId, filename, contentType, size, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        cardId:
+          type: string
+          format: uuid
+        uploaderId:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+
+    Activity:
+      type: object
+      required: [id, cardId, actorId, action, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        cardId:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum:
+            - created
+            - updated
+            - moved
+            - assigned
+            - labels_changed
+            - commented
+            - attachment_added
+            - attachment_removed
+        field:
+          type: string
+          nullable: true
+          description: Изменённое поле для action=updated
+        oldValue:
+          type: string
+          nullable: true
+        newValue:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
