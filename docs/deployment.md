@@ -1,0 +1,82 @@
+# Деплой на VPS
+
+Staging и production работают на одном VPS как два независимых стека Docker Compose (`kanban-staging`, `kanban-production`) со своими базами и томами. Nginx на хосте принимает HTTPS и проксирует запросы в контейнер `web` нужного стека. Выкладку выполняет GitHub Actions по SSH: `deploy/deploy.sh` скачивает образы с тегом коммита, перезапускает стек и при неуспешной проверке здоровья возвращает предыдущую версию.
+
+## Подготовка сервера (один раз)
+
+Нужен сервер с Ubuntu 24.04 или Debian 12, 2 ГБ памяти и больше, два доменных имени, указывающих на его адрес (например, `staging.example.ru` и `kanban.example.ru`). Без своего домена подойдут имена вида `staging.<ip>.sslip.io` и `<ip>.sslip.io`.
+
+```sh
+# Docker и nginx
+curl -fsSL https://get.docker.com | sh
+apt install -y nginx certbot python3-certbot-nginx
+
+# пользователь для деплоя
+adduser --disabled-password deploy
+usermod -aG docker deploy
+mkdir -p /opt/kanban && chown deploy:deploy /opt/kanban
+
+# ключ, которым GitHub Actions заходит на сервер
+sudo -u deploy ssh-keygen -t ed25519 -N '' -f /home/deploy/.ssh/deploy
+sudo -u deploy sh -c 'cat ~/.ssh/deploy.pub >> ~/.ssh/authorized_keys'
+cat /home/deploy/.ssh/deploy        # закрытый ключ → секрет SSH_KEY
+```
+
+Переменные окружений — по образцу `deploy/compose/env.example`:
+
+```sh
+sudo -u deploy cp env.example /opt/kanban/.env.staging      # WEB_PORT=8101, GRAFANA_PORT=3101
+sudo -u deploy cp env.example /opt/kanban/.env.production   # WEB_PORT=8102, GRAFANA_PORT=3102
+chmod 600 /opt/kanban/.env.*
+# заполнить пароли и JWT_SECRET (openssl rand -base64 48), разные для двух окружений
+```
+
+Nginx и сертификаты:
+
+```sh
+sed -e s/STAGING_DOMAIN/staging.example.ru/ -e s/PRODUCTION_DOMAIN/kanban.example.ru/ \
+  deploy/nginx/kanban.conf.template > /etc/nginx/sites-available/kanban.conf
+ln -s /etc/nginx/sites-available/kanban.conf /etc/nginx/sites-enabled/
+certbot --nginx -d staging.example.ru -d kanban.example.ru
+systemctl reload nginx
+```
+
+Ежедневный бэкап баз:
+
+```sh
+echo '30 3 * * * deploy /opt/kanban/backup.sh' > /etc/cron.d/kanban-backup
+```
+
+## Настройка репозитория
+
+Settings → Secrets and variables → Actions:
+
+| Тип | Имя | Значение |
+|---|---|---|
+| secret | `SSH_HOST` | адрес сервера |
+| secret | `SSH_USER` | `deploy` |
+| secret | `SSH_KEY` | закрытый ключ из шага выше |
+| secret | `STAGING_ADMIN_EMAIL`, `STAGING_ADMIN_PASSWORD` | администратор staging (для smoke- и нагрузочных тестов) |
+| secret | `CODECOV_TOKEN` | токен Codecov (необязательно) |
+| variable | `STAGING_URL` | `https://staging.example.ru` |
+| variable | `PRODUCTION_URL` | `https://kanban.example.ru` |
+| variable | `DEPLOY_ENABLED` | `true` — включает деплой и нагрузочный workflow |
+
+Окружения `staging` и `production` (Settings → Environments) создаются автоматически при первом деплое; для production можно включить ручное подтверждение.
+
+Образы в GHCR приватные: при каждом деплое сервер входит в реестр токеном текущей сборки, отдельный токен не нужен.
+
+## Надёжность
+
+- контейнеры перезапускаются при сбое (`restart: unless-stopped`), Docker поднимает их после перезагрузки сервера;
+- у backend и web есть проверки здоровья; `deploy.sh` ждёт их и откатывает версию, если новая не поднялась за 2 минуты;
+- миграции применяет сервер при старте под advisory-блокировкой PostgreSQL;
+- сервер завершает запросы при остановке (graceful shutdown, 15 с);
+- PostgreSQL выгружается ежедневно, копии хранятся 14 дней.
+
+## Ручной деплой и откат
+
+```sh
+ssh deploy@server sh /opt/kanban/deploy.sh staging <sha-коммита>
+cat /opt/kanban/.deployed-staging        # текущая версия
+```

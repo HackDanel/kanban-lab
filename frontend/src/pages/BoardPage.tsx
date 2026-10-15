@@ -84,7 +84,11 @@ export function BoardPage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    // Пробел берёт и опускает карточку, Enter открывает её (по умолчанию dnd-kit занимает и Enter).
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space'] },
+    }),
   )
 
   const columns = useMemo(() => sortColumns(board.data?.columns ?? []), [board.data])

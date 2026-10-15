@@ -6,12 +6,12 @@
 
 ## Выбранный стек
 
-- Frontend: React + TypeScript, Vite, Redux Toolkit (RTK Query), React Router, dnd-kit, Material UI
+- Frontend: React + TypeScript, Vite, Redux Toolkit (RTK Query), React Router, dnd-kit, Material UI; линтер oxlint, форматирование Prettier
 - Backend: Go, chi, pgx + sqlc, goose
 - API: OpenAPI 3, генерация кода `oapi-codegen` и `openapi-typescript`, Swagger UI
-- БД: PostgreSQL; Redis для сессий, ограничения частоты запросов и рассылки событий
+- БД: PostgreSQL (данные и refresh-токены); Redis для ограничения частоты запросов и рассылки событий между экземплярами сервера
 - Real-time: WebSocket
-- Тестирование: `go test` + testify, testcontainers-go, Vitest + React Testing Library, Postman + Newman, Playwright, k6, OWASP ZAP, govulncheck, gosec, npm audit, Trivy
+- Тестирование: `go test` + testify, testcontainers-go, gobco, Vitest + React Testing Library + MSW, Postman + Newman, Playwright, k6, OWASP ZAP, govulncheck, gosec, golangci-lint, npm audit, Trivy
 - CI/CD: GitHub Actions, образы в GHCR, деплой на VPS по SSH
 - Инфраструктура: Docker Compose, Nginx
 - Мониторинг: Prometheus + Grafana
@@ -37,7 +37,8 @@
 
 ## Ограничения выбранного стека
 
-- Штатный инструмент покрытия Go считает только покрытие операторов. Покрытие ветвей сервера измеряется отдельным инструментом `gobco`; на клиенте оба показателя даёт Vitest.
+- Штатный инструмент покрытия Go считает только покрытие операторов. Покрытие ветвей сервера измеряется отдельным инструментом `gobco`; на клиенте оба показателя даёт Vitest. `gobco` инструментирует один пакет и запускает только тесты из его каталога, поэтому для сервисного и HTTP-слоёв интеграционный набор на время замера копируется в пакет (`backend/scripts/branch-coverage.sh`).
+- Генератор типов клиента `openapi-typescript` 7 требует TypeScript 5, а в проекте TypeScript 6; генератор запускается через `npx` отдельно от зависимостей проекта.
 - В Go больше явного кода, чем во фреймворках с «магией» (ручная обработка ошибок, отсутствие встроенного внедрения зависимостей), поэтому скорость разработки ниже, чем на Express или FastAPI.
 - Клиент и сервер написаны на разных языках, общие типы возможны только через генерацию из OpenAPI.
 - Позиция карточки хранится числом с плавающей точкой и требует редкой перенумерации колонки.

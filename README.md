@@ -3,59 +3,94 @@
 Kanban-доска (аналог Jira) с полным циклом тестирования. Лабораторная работа № 16 по дисциплине «Поддержка и тестирование программных модулей».
 
 - Frontend: React, TypeScript, Redux Toolkit, dnd-kit, Material UI
-- Backend: Go, PostgreSQL, Redis
-- Тесты: `go test`, Vitest, Newman, Playwright, k6, OWASP ZAP
+- Backend: Go, PostgreSQL, Redis, WebSocket
+- Тесты: `go test` + testcontainers, Vitest, Newman, Playwright, k6, OWASP ZAP
+- CI/CD: GitHub Actions, образы в GHCR, деплой на VPS
 
-Обоснование стека — в [STACK.md](STACK.md), требования и архитектура — в [docs/](docs/), контракт API — в [api/openapi.yaml](api/openapi.yaml).
-
-## Состояние
-
-| Этап | Статус |
+| Документ | Содержание |
 |---|---|
-| Каркас репозитория, контракт OpenAPI, требования, архитектура | готово |
-| Frontend: аутентификация, список проектов, модульные тесты | готово |
-| Backend | не начат |
-| Frontend: доска, карточки, drag-and-drop | не начат |
-| Интеграционные, API, E2E, нагрузочные, security-тесты | не начаты |
-| CI/CD | проверки frontend и контракта; сборка образов и деплой не настроены |
+| [STACK.md](STACK.md) | обоснование выбора стека |
+| [docs/requirements.md](docs/requirements.md) | требования и их трассировка до API и тест-кейсов |
+| [docs/architecture.md](docs/architecture.md) | архитектура, модель данных, ключевые решения |
+| [api/openapi.yaml](api/openapi.yaml) | контракт API; Swagger UI — `/docs` на запущенном стенде |
+| [docs/test-plan.md](docs/test-plan.md) | план тестирования |
+| [docs/test-cases.md](docs/test-cases.md) | тест-кейсы и их автотесты |
+| [docs/bug-reports/](docs/bug-reports/) | баг-репорты |
+| [docs/usability-checklist.md](docs/usability-checklist.md) | чек-лист юзабилити |
+| [docs/test-report.md](docs/test-report.md) | отчёт о тестировании |
+| [docs/deployment.md](docs/deployment.md) | подготовка VPS и деплой |
 
-## Требования к окружению
+## Возможности
 
-- Node.js 22 или новее
-- Go (версия — в `backend/go.mod`, появится вместе с сервером)
-- Docker с Docker Compose
+- регистрация, вход, выход; JWT, обновление сессии, защита от CSRF; роли администратора, менеджера и разработчика;
+- проекты и их участники, доски, колонки с порядком и WIP-лимитами;
+- карточки: исполнитель, приоритет, дедлайн, метки, описание, комментарии, вложения, перемещение drag-and-drop;
+- поиск по тексту и фильтры по исполнителю, меткам, приоритету;
+- история изменений карточки;
+- обновление доски у всех пользователей в реальном времени;
+- метрики Prometheus и дашборд Grafana.
 
 ## Запуск
 
+Нужен Docker с Docker Compose.
+
 ```sh
-cp .env.example .env
-docker compose up -d      # PostgreSQL и Redis
-cd frontend
-npm ci
-npm run dev               # http://localhost:5173, запросы /api проксируются на :8080
+docker compose up -d --build --wait
 ```
 
-Сервера пока нет, поэтому интерфейс открывается, но вход и регистрация вернут ошибку.
+- приложение: http://localhost:8000 (вход `admin@example.com` / `admin-password`, задаются переменными `ADMIN_EMAIL`, `ADMIN_PASSWORD`);
+- документация API: http://localhost:8000/docs;
+- мониторинг: `docker compose --profile monitoring up -d`, затем Grafana на http://localhost:3000 (`admin` / `admin`), Prometheus на http://localhost:9090.
+
+Новые пользователи регистрируются разработчиками; роль менеджера выдаёт администратор на странице «Пользователи».
+
+### Разработка
+
+Нужны Go 1.27 и Node.js 22 или новее.
+
+```sh
+docker compose up -d postgres redis
+cp .env.example .env    # и заполнить JWT_SECRET
+cd backend && set -a && . ../.env && set +a && go run ./cmd/server
+cd frontend && npm ci && npm run dev    # http://localhost:5173
+```
+
+Код из контракта и SQL генерируется командой `make gen` (для sqlc нужен Docker).
 
 ## Тесты
 
 ```sh
-cd frontend
-npm run lint
-npm run typecheck
-npm run test:coverage     # пороги: 80 % строк, 70 % ветвей
+make test          # модульные и интеграционные тесты, покрытие (нужен Docker для testcontainers)
+make coverage-branches   # покрытие ветвей бэкенда (gobco)
+make lint
 ```
 
-Типы клиента генерируются из контракта: `npm run gen:api`.
+Для API-, E2E-, нагрузочных тестов и сканирования нужен запущенный стек. Тесты создают много входов подряд, поэтому лимит попыток входа на время прогона поднимается:
+
+```sh
+AUTH_RATE_LIMIT=10000 docker compose up -d --build --wait
+make api-test      # Newman
+cd e2e && npm ci && npx playwright install chromium firefox msedge && cd ..
+make e2e           # Playwright: Chromium, Firefox, Edge (E2E_BROWSERS=chromium,firefox — без Edge)
+make load          # k6: 1000 пользователей, 10 000 карточек
+make load-rps      # k6: постоянные 1000 запросов в секунду
+make security      # govulncheck, gosec, npm audit, OWASP ZAP
+```
+
+## CI/CD
+
+`.github/workflows/ci.yml`: lint → модульные тесты → сборка образов → интеграционные тесты → E2E в трёх браузерах и Newman → сканирование безопасности → деплой на staging → деплой на production (только из `main`). Пуш в `develop` выкатывает staging, пуш в `main` — staging и затем production. Отчёты (покрытие, трассировки Playwright, Newman, ZAP) сохраняются как артефакты сборки.
+
+`.github/workflows/load.yml` — нагрузочный тест staging вручную и раз в неделю.
 
 ## Структура
 
 ```
 api/        контракт OpenAPI
-backend/    сервер на Go
-frontend/   клиент
+backend/    сервер на Go: cmd/, internal/{http,service,repository,domain,realtime,platform}, migrations/, queries/, tests/
+frontend/   клиент: src/{app,features,pages,shared}
 e2e/        сценарии Playwright
-tests/      Postman, k6, ZAP
-deploy/     Nginx, Compose для staging и production, Prometheus, Grafana
-docs/       требования, архитектура, тест-план, отчёты
+tests/      postman/, load/ (k6), security/ (ZAP и сканеры)
+deploy/     стек для VPS, скрипты деплоя и бэкапа, nginx, Prometheus, Grafana
+docs/       требования, архитектура, тест-план, тест-кейсы, баг-репорты, отчёт
 ```
