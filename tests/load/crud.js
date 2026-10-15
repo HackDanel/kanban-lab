@@ -42,7 +42,8 @@ export function setup() {
 const queries = ['login', 'report', 'export', 'payment', 'task 42', 'mobile']
 
 export default function (data) {
-  const params = (op) => ({ ...json(data.token), tags: { op } })
+  // name groups URLs with card ids into one series per operation
+  const params = (op) => ({ ...json(data.token), tags: { op, name: op } })
   const column = data.columns[__VU % data.columns.length]
 
   group('read board', () => {
