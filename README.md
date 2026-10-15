@@ -5,7 +5,9 @@ Kanban-доска (аналог Jira) с полным циклом тестир�
 - Frontend: React, TypeScript, Redux Toolkit, dnd-kit, Material UI
 - Backend: Go, PostgreSQL, Redis, WebSocket
 - Тесты: `go test` + testcontainers, Vitest, Newman, Playwright, k6, OWASP ZAP
-- CI/CD: GitHub Actions, образы в GHCR, деплой на VPS
+- CI/CD: GitHub Actions, образы в GHCR, деплой на сервер
+
+Стенды: staging — https://staging.37.194.184.235.sslip.io, production — https://kanban.37.194.184.235.sslip.io.
 
 | Документ | Содержание |
 |---|---|
@@ -18,7 +20,7 @@ Kanban-доска (аналог Jira) с полным циклом тестир�
 | [docs/bug-reports/](docs/bug-reports/) | баг-репорты |
 | [docs/usability-checklist.md](docs/usability-checklist.md) | чек-лист юзабилити |
 | [docs/test-report.md](docs/test-report.md) | отчёт о тестировании |
-| [docs/deployment.md](docs/deployment.md) | подготовка VPS и деплой |
+| [docs/deployment.md](docs/deployment.md) | стенды, подготовка сервера и деплой |
 | [docs/presentation/kanban-lab.pptx](docs/presentation/kanban-lab.pptx) | презентация к защите (собирается `node docs/presentation/build.js`, снимки экрана — `SHOTS=1 npx playwright test zz-screenshots` в `e2e/`) |
 
 ## Возможности

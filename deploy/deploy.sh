@@ -22,8 +22,17 @@ run() {
 PREVIOUS=$(cat "$STATE" 2>/dev/null || true)
 echo "deploying $PROJECT: ${PREVIOUS:-none} -> $TAG"
 
-run "$TAG" pull --quiet
-if run "$TAG" up -d --remove-orphans --wait --wait-timeout 120; then
+# Registries time out now and then. Pull with retries; if a pull still fails,
+# "up" fetches only the images that are really missing and a failure there
+# leads to the rollback below.
+for attempt in 1 2 3; do
+	if run "$TAG" pull --quiet; then
+		break
+	fi
+	echo "pull failed (attempt $attempt)" >&2
+	sleep 10
+done
+if run "$TAG" up -d --pull missing --remove-orphans --wait --wait-timeout 120; then
 	echo "$TAG" > "$STATE"
 	docker image prune -f >/dev/null
 	echo "deployed $TAG"
