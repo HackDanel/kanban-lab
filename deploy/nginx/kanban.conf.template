@@ -1,0 +1,64 @@
+# Edge nginx on the VPS host: TLS for both environments.
+# Replace STAGING_DOMAIN and PRODUCTION_DOMAIN, then obtain certificates with
+#   certbot --nginx -d STAGING_DOMAIN -d PRODUCTION_DOMAIN
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name STAGING_DOMAIN PRODUCTION_DOMAIN;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name PRODUCTION_DOMAIN;
+    # ssl_certificate lines are added by certbot
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    client_max_body_size 12m;
+
+    location /grafana/ {
+        proxy_pass http://127.0.0.1:3102;
+        proxy_set_header Host $http_host;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8102;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 1h;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name STAGING_DOMAIN;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    client_max_body_size 12m;
+
+    location /grafana/ {
+        proxy_pass http://127.0.0.1:3101;
+        proxy_set_header Host $http_host;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8101;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 1h;
+    }
+}

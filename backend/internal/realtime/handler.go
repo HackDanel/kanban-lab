@@ -52,11 +52,11 @@ func (h *Hub) Handler(authorize Authorizer, originPatterns []string) http.Handle
 		for {
 			select {
 			case <-ctx.Done():
-				conn.Close(websocket.StatusNormalClosure, "")
+				_ = conn.Close(websocket.StatusNormalClosure, "")
 				return
 			case data, ok := <-c.send:
 				if !ok {
-					conn.Close(websocket.StatusTryAgainLater, "too slow")
+					_ = conn.Close(websocket.StatusTryAgainLater, "too slow")
 					return
 				}
 				writeCtx, cancel := context.WithTimeout(ctx, writeTimeout)

@@ -183,3 +183,23 @@ func TestOptional(t *testing.T) {
 	assert.Equal(t, 3, *v)
 	assert.True(t, set)
 }
+
+func TestRealIPTrustsOnlyPrivateProxies(t *testing.T) {
+	var seen string
+	h := realIP(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { seen = r.RemoteAddr }))
+	cases := []struct{ remote, header, want string }{
+		{"172.18.0.5:1234", "203.0.113.7", "203.0.113.7:1234"},
+		{"127.0.0.1:1234", "198.51.100.1", "198.51.100.1:1234"},
+		{"203.0.113.9:1234", "10.0.0.1", "203.0.113.9:1234"},
+		{"172.18.0.5:1234", "not-an-ip", "172.18.0.5:1234"},
+		{"172.18.0.5:1234", "", "172.18.0.5:1234"},
+		{"garbage", "203.0.113.7", "garbage"},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = tc.remote
+		req.Header.Set("X-Real-IP", tc.header)
+		h.ServeHTTP(httptest.NewRecorder(), req)
+		assert.Equal(t, tc.want, seen, "%s via %q", tc.remote, tc.header)
+	}
+}

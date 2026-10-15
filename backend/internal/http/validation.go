@@ -22,18 +22,18 @@ const apiBase = "/api/v1"
 func init() {
 	// Same rule as the generated api.Email type uses when decoding, so that a
 	// bad address is reported by the validator together with its field name.
-	openapi3.DefineStringFormatCallback("email", func(value string) error {
+	openapi3.DefineStringFormatValidator("email", openapi3.NewCallbackValidator(func(value string) error {
 		if _, err := mail.ParseAddress(value); err != nil {
-			return errors.New("Укажите корректный email")
+			return errors.New("укажите корректный email")
 		}
 		return nil
-	})
-	openapi3.DefineStringFormatCallback("uuid", func(value string) error {
+	}))
+	openapi3.DefineStringFormatValidator("uuid", openapi3.NewCallbackValidator(func(value string) error {
 		if _, err := uuid.Parse(value); err != nil {
-			return errors.New("Некорректный идентификатор")
+			return errors.New("некорректный идентификатор")
 		}
 		return nil
-	})
+	}))
 }
 
 // paramName extracts the parameter name from the binding errors of the generated router.
@@ -63,7 +63,7 @@ func paramName(err error) (string, bool) {
 // requestValidator checks every API request against the OpenAPI contract:
 // parameters, bodies and the security requirement of the operation.
 func requestValidator(log *slog.Logger) (func(http.Handler) http.Handler, error) {
-	spec, err := api.GetSwagger()
+	spec, err := api.GetSpec()
 	if err != nil {
 		return nil, err
 	}

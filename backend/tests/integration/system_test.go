@@ -96,7 +96,7 @@ func TestRealtimeEvents(t *testing.T) {
 
 	conn, _, err := websocket.Dial(ctx, wsURL+"&token="+watcher.token, nil)
 	require.NoError(t, err)
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 	require.Eventually(t, func() bool { return env.hub.Clients() >= 1 }, 5*time.Second, 10*time.Millisecond)
 
 	card := f.card(t, f.owner, f.todo, "live")

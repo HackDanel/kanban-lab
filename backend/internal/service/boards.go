@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/google/uuid"
 
@@ -181,7 +182,7 @@ func (s *Service) columnWithCount(ctx context.Context, q *repository.Queries, id
 	if err != nil {
 		return repository.ListColumnsRow{}, fmt.Errorf("count cards: %w", err)
 	}
-	return columnRow(column, int32(count)), nil
+	return columnRow(column, int32(min(count, math.MaxInt32))), nil // #nosec G115 -- clamped to MaxInt32
 }
 
 // UpdateColumn renames a column or changes its WIP limit. Lowering the limit

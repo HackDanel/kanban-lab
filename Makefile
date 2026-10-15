@@ -30,7 +30,9 @@ test: test-backend test-frontend ## Модульные и интеграцион
 
 .PHONY: test-backend
 test-backend:
-	cd backend && go test -race -coverprofile=coverage.out ./...
+	cd backend && go test -race -coverpkg=./internal/... -coverprofile=coverage.raw ./...
+	cd backend && grep -v -E '/internal/http/api/api.gen.go|/internal/repository/.*\.sql\.go|/internal/repository/(db|models|querier)\.go' coverage.raw > coverage.out
+	cd backend && go tool cover -func=coverage.out | tail -1
 
 .PHONY: test-frontend
 test-frontend:
@@ -48,10 +50,17 @@ e2e: ## E2E-тесты Playwright в трёх браузерах
 
 .PHONY: load
 load: ## Нагрузочный тест k6
-	docker run --rm --network host -v $(CURDIR)/tests/load:/scripts grafana/k6 run /scripts/crud.js
+	docker run --rm --network host -u $$(id -u):$$(id -g) -v $(CURDIR)/tests/load:/scripts grafana/k6 run /scripts/crud.js
 
 .PHONY: security
-security: ## Проверка зависимостей и ZAP baseline
-	cd backend && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-	cd frontend && npm audit --audit-level=high
+security: ## Сканеры зависимостей и OWASP ZAP по запущенному стеку
+	sh tests/security/deps.sh
 	sh tests/security/zap-baseline.sh
+
+.PHONY: load-rps
+load-rps: ## Нагрузочный тест: постоянные 1000 запросов в секунду
+	docker run --rm --network host -u $$(id -u):$$(id -g) -v $(CURDIR)/tests/load:/scripts grafana/k6 run /scripts/rps.js
+
+.PHONY: coverage-branches
+coverage-branches: ## Покрытие ветвей бэкенда (gobco)
+	sh backend/scripts/branch-coverage.sh

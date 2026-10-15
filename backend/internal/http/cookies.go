@@ -22,11 +22,13 @@ type cookies struct {
 
 func (c cookies) setSession(w http.ResponseWriter, s service.Session) {
 	maxAge := int(s.RefreshTTL / time.Second)
+	// #nosec G124 -- Secure is configurable only to allow plain-HTTP development; production requires it (see config)
 	http.SetCookie(w, &http.Cookie{
 		Name: refreshCookie, Value: s.RefreshToken, Path: refreshCookiePath, MaxAge: maxAge,
 		HttpOnly: true, Secure: c.secure, SameSite: http.SameSiteStrictMode,
 	})
 	// Readable by the page script, which echoes it in the X-CSRF-Token header.
+	// #nosec G124 -- HttpOnly would defeat the double-submit check
 	http.SetCookie(w, &http.Cookie{
 		Name: csrfCookie, Value: s.CSRFToken, Path: "/", MaxAge: maxAge,
 		Secure: c.secure, SameSite: http.SameSiteStrictMode,
@@ -34,7 +36,9 @@ func (c cookies) setSession(w http.ResponseWriter, s service.Session) {
 }
 
 func (c cookies) clear(w http.ResponseWriter) {
+	// #nosec G124 -- expires the cookie; attributes mirror setSession
 	http.SetCookie(w, &http.Cookie{Name: refreshCookie, Path: refreshCookiePath, MaxAge: -1, HttpOnly: true, Secure: c.secure, SameSite: http.SameSiteStrictMode})
+	// #nosec G124 -- expires the cookie; attributes mirror setSession
 	http.SetCookie(w, &http.Cookie{Name: csrfCookie, Path: "/", MaxAge: -1, Secure: c.secure, SameSite: http.SameSiteStrictMode})
 }
 

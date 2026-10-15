@@ -136,3 +136,20 @@ func rateLimitAuth(limiter RateLimiter, log *slog.Logger) func(http.Handler) htt
 		})
 	}
 }
+
+// realIP replaces the client address with X-Real-IP, but only when the request
+// comes from a trusted proxy: a loopback or private address, which is where the
+// web container's nginx connects from. A client talking to the backend directly
+// cannot spoof its address to escape the rate limiter.
+func realIP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, port, err := net.SplitHostPort(r.RemoteAddr)
+		peer := net.ParseIP(host)
+		if err == nil && peer != nil && (peer.IsLoopback() || peer.IsPrivate()) {
+			if forwarded := net.ParseIP(strings.TrimSpace(r.Header.Get("X-Real-IP"))); forwarded != nil {
+				r.RemoteAddr = net.JoinHostPort(forwarded.String(), port)
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}

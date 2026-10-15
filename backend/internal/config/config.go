@@ -43,7 +43,7 @@ func Load(getenv func(string) string) (Config, error) {
 		Env:             l.str("APP_ENV", "development"),
 		HTTPAddr:        l.str("HTTP_ADDR", ":8080"),
 		DatabaseURL:     l.required("DATABASE_URL"),
-		DBMaxConns:      int32(l.integer("DB_MAX_CONNS", 50, 1, 1000)),
+		DBMaxConns:      int32(l.integer("DB_MAX_CONNS", 50, 1, 1000)), // #nosec G115 -- bounded to 1..1000 by the loader
 		RedisURL:        l.required("REDIS_URL"),
 		JWTSecret:       l.required("JWT_SECRET"),
 		AccessTTL:       l.duration("JWT_ACCESS_TTL", 15*time.Minute),

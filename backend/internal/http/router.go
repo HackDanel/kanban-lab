@@ -42,7 +42,7 @@ func NewRouter(cfg Config) (http.Handler, error) {
 	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP, middleware.RequestID, accessLog(cfg.Log), recoverer(cfg.Log), securityHeaders)
+	r.Use(realIP, middleware.RequestID, accessLog(cfg.Log), recoverer(cfg.Log), securityHeaders)
 	if cfg.Metrics != nil {
 		r.Use(cfg.Metrics.Middleware)
 		r.Handle("/metrics", cfg.Metrics.Handler())

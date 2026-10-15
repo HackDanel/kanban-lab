@@ -30,7 +30,7 @@ func dial(t *testing.T, srv *httptest.Server, query string) *websocket.Conn {
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/?"+query, nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { conn.CloseNow() })
+	t.Cleanup(func() { _ = conn.CloseNow() })
 	return conn
 }
 
@@ -61,7 +61,7 @@ func TestHubDeliversEventsToWatchersOfTheBoard(t *testing.T) {
 	assert.Equal(t, "card.moved", got["type"])
 	assert.Equal(t, board.String(), got["boardId"])
 
-	watcher.Close(websocket.StatusNormalClosure, "")
+	_ = watcher.Close(websocket.StatusNormalClosure, "")
 	waitForClients(t, hub, 1)
 
 	// A read that times out closes the connection, so this check goes last.

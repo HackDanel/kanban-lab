@@ -38,7 +38,7 @@ func docsInit(w http.ResponseWriter, _ *http.Request) {
 }
 
 func docsSpec(w http.ResponseWriter, _ *http.Request) {
-	spec, err := api.GetSwagger()
+	spec, err := api.GetSpec()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

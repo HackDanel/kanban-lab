@@ -157,7 +157,7 @@ func healthcheck() int {
 		addr = "localhost:8080"
 	}
 	client := http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://" + addr + "/healthz")
+	resp, err := client.Get("http://" + addr + "/healthz") // #nosec G704 -- address comes from the server's own configuration
 	if err != nil {
 		return 1
 	}

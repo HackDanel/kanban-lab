@@ -1,0 +1,4 @@
+# ZAP rule overrides: <id>	<IGNORE|WARN|FAIL>	<reason>
+# Each exception must be justified; reviewed in docs/test-report.md.
+10049	IGNORE	(Storable and cacheable content) the SPA shell is served with Cache-Control: no-cache on purpose
+10110	IGNORE	(Dangerous JS functions) matches inside the minified MUI/React bundle, no user input reaches them

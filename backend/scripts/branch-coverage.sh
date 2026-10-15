@@ -44,4 +44,10 @@ done
 with_integration_suite internal/service
 with_integration_suite internal/http
 
-echo "total: $total_hit / $total_all branches ($((100 * total_hit / total_all))%)"
+percent=$((100 * total_hit / total_all))
+echo "total: $total_hit / $total_all branches ($percent%)"
+MIN_BRANCH=${MIN_BRANCH:-70}
+if [ "$percent" -lt "$MIN_BRANCH" ]; then
+	echo "branch coverage $percent% is below $MIN_BRANCH%" >&2
+	exit 1
+fi
