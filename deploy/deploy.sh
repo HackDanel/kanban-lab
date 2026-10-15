@@ -1,12 +1,13 @@
 #!/bin/sh
-# Runs on the VPS: pulls the images for IMAGE_TAG and restarts the stack of
+# Runs on the server: pulls the images for IMAGE_TAG and restarts the stack of
 # the given environment. If the new version does not become healthy, the
-# previous tag is started again.
+# previous tag is started again. The directory defaults to /opt/kanban and can
+# be changed with KANBAN_DIR.
 # Usage: deploy.sh <staging|production> <image-tag>
 set -eu
 ENV=$1
 TAG=$2
-DIR=/opt/kanban
+DIR=${KANBAN_DIR:-/opt/kanban}
 PROJECT="kanban-$ENV"
 ENV_FILE="$DIR/.env.$ENV"
 STATE="$DIR/.deployed-$ENV"

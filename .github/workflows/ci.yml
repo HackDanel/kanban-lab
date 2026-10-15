@@ -277,16 +277,12 @@ jobs:
       - uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
-      - name: Upload deployment files and deploy
-        env:
-          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+      - name: Deploy
+        # The key is restricted on the server to deploy/ci-command.sh: it fetches
+        # the deployment files of this commit and runs deploy.sh, nothing else.
         run: |
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
-          scp deploy/compose/docker-compose.yml deploy/deploy.sh deploy/backup.sh "$TARGET:/opt/kanban/"
-          scp deploy/prometheus/prometheus.yml "$TARGET:/opt/kanban/prometheus.yml"
-          scp -r deploy/grafana "$TARGET:/opt/kanban/"
-          echo "${{ secrets.GITHUB_TOKEN }}" | ssh "$TARGET" docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          ssh "$TARGET" sh /opt/kanban/deploy.sh staging "${{ github.sha }}"
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+          ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" deploy staging "${{ github.sha }}"
       - name: Smoke test
         run: |
           curl -fsS "${{ vars.STAGING_URL }}/readyz"
@@ -311,12 +307,9 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
       - name: Deploy
-        env:
-          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
         run: |
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
-          echo "${{ secrets.GITHUB_TOKEN }}" | ssh "$TARGET" docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          ssh "$TARGET" sh /opt/kanban/deploy.sh production "${{ github.sha }}"
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+          ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" deploy production "${{ github.sha }}"
       - name: Smoke test
         run: |
           curl -fsS "${{ vars.PRODUCTION_URL }}/readyz"

@@ -1,4 +1,27 @@
-# Деплой на VPS
+# Деплой
+
+## Текущий стенд
+
+| Окружение | Адрес | Ветка |
+|---|---|---|
+| staging | https://staging.37.194.184.235.sslip.io | `develop` (и `main` перед production) |
+| production | https://kanban.37.194.184.235.sslip.io | `main` |
+
+Сервер — домашний `b450` (Debian 13), на нём уже работают другие сервисы за Apache. Поэтому:
+
+- стеки лежат в `~/kanban` пользователя `hackdanel` (`KANBAN_DIR=/home/hackdanel/kanban`), а не в `/opt/kanban`;
+- TLS завершает уже установленный Apache: `deploy/apache/setup-https.sh` добавляет два виртуальных хоста по именам `sslip.io` и получает для них сертификаты certbot, не трогая остальные сайты;
+- web-контейнеры слушают `127.0.0.1:8101` и `127.0.0.1:8102`, Grafana — `127.0.0.1:3101` и `3102` (доступна по `/grafana/` на том же домене);
+- ключ CI в `~/.ssh/authorized_keys` ограничен принудительной командой `deploy/ci-command.sh`: он может только скачать файлы деплоя указанного коммита из публичного репозитория и запустить `deploy.sh`; шелла по нему не получить;
+- образы в GHCR публичные, сервер скачивает их без входа в реестр;
+- бэкап баз — cron пользователя, 03:30 ежедневно, файлы в `~/kanban/backups`;
+- нагрузочный workflow `load.yml` запускается только вручную и по умолчанию с малой нагрузкой: сервер общий.
+
+Пароли администратора, Grafana и базы каждого окружения сгенерированы на сервере и лежат в `~/kanban/.env.staging` и `~/kanban/.env.production` (права 600).
+
+## Подготовка другого сервера
+
+Ниже — общий порядок для чистого VPS с nginx на хосте.
 
 Staging и production работают на одном VPS как два независимых стека Docker Compose (`kanban-staging`, `kanban-production`) со своими базами и томами. Nginx на хосте принимает HTTPS и проксирует запросы в контейнер `web` нужного стека. Выкладку выполняет GitHub Actions по SSH: `deploy/deploy.sh` скачивает образы с тегом коммита, перезапускает стек и при неуспешной проверке здоровья возвращает предыдущую версию.
 
@@ -54,6 +77,7 @@ Settings → Secrets and variables → Actions:
 | Тип | Имя | Значение |
 |---|---|---|
 | secret | `SSH_HOST` | адрес сервера |
+| secret | `SSH_PORT` | порт SSH |
 | secret | `SSH_USER` | `deploy` |
 | secret | `SSH_KEY` | закрытый ключ из шага выше |
 | secret | `STAGING_ADMIN_EMAIL`, `STAGING_ADMIN_PASSWORD` | администратор staging (для smoke- и нагрузочных тестов) |
@@ -64,7 +88,11 @@ Settings → Secrets and variables → Actions:
 
 Окружения `staging` и `production` (Settings → Environments) создаются автоматически при первом деплое; для production можно включить ручное подтверждение.
 
-Образы в GHCR приватные: при каждом деплое сервер входит в реестр токеном текущей сборки, отдельный токен не нужен.
+Ключ деплоя добавляется в `authorized_keys` с принудительной командой:
+
+```
+command="KANBAN_DIR=/opt/kanban /opt/kanban/ci-command.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA… kanban-lab-ci-deploy
+```
 
 ## Надёжность
 
