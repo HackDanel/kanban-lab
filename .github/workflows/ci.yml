@@ -268,6 +268,9 @@ jobs:
     needs: [integration, e2e, api, security]
     if: github.event_name == 'push' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     environment:
       name: staging
       url: ${{ vars.STAGING_URL }}
@@ -278,11 +281,12 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
       - name: Deploy
-        # The key is restricted on the server to deploy/ci-command.sh: it fetches
-        # the deployment files of this commit and runs deploy.sh, nothing else.
+        # The key is restricted on the server to deploy/ci-command.sh: with the
+        # job token from stdin it fetches this commit's deployment files and runs
+        # deploy.sh, nothing else.
         run: |
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
-          ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" deploy staging "${{ github.sha }}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" deploy staging "${{ github.sha }}"
       - name: Smoke test
         run: |
           curl -fsS "${{ vars.STAGING_URL }}/readyz"
@@ -297,6 +301,9 @@ jobs:
     needs: deploy-staging
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
@@ -309,7 +316,7 @@ jobs:
       - name: Deploy
         run: |
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
-          ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" deploy production "${{ github.sha }}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" deploy production "${{ github.sha }}"
       - name: Smoke test
         run: |
           curl -fsS "${{ vars.PRODUCTION_URL }}/readyz"
