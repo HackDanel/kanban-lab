@@ -8,7 +8,7 @@ import Toolbar from '@mui/material/Toolbar'
 import Typography from '@mui/material/Typography'
 import { useLogoutMutation } from '../features/auth/authApi'
 import { selectCurrentUser } from '../features/auth/authSlice'
-import { ROLE_LABELS } from '../shared/lib/permissions'
+import { isAdmin, ROLE_LABELS } from '../shared/lib/permissions'
 import { useAppSelector } from './hooks'
 
 export function AppLayout() {
@@ -29,6 +29,11 @@ export function AppLayout() {
           >
             Kanban
           </Link>
+          {isAdmin(user) && (
+            <Button color="inherit" component={RouterLink} to="/admin/users">
+              Пользователи
+            </Button>
+          )}
           {user && (
             <>
               <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
@@ -46,7 +51,7 @@ export function AppLayout() {
           </Button>
         </Toolbar>
       </AppBar>
-      <Container component="main" maxWidth="lg" sx={{ py: 3 }}>
+      <Container component="main" maxWidth={false} sx={{ py: 3 }}>
         <Outlet />
       </Container>
     </>

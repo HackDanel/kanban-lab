@@ -26,6 +26,11 @@ import (
 )
 
 func main() {
+	// The runtime image has no shell or curl, so the container health check
+	// calls the binary itself.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck())
+	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	if err := run(log); err != nil {
 		log.Error("server stopped", "err", err)
@@ -141,4 +146,24 @@ func purgeTokens(ctx context.Context, svc *service.Service, log *slog.Logger) {
 			}
 		}
 	}
+}
+
+func healthcheck() int {
+	addr := os.Getenv("HTTP_ADDR")
+	if addr == "" || addr[0] == ':' {
+		addr = "localhost" + addr
+	}
+	if addr == "localhost" {
+		addr = "localhost:8080"
+	}
+	client := http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + addr + "/healthz")
+	if err != nil {
+		return 1
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
 }

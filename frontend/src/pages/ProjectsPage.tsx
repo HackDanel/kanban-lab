@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { Link as RouterLink } from 'react-router'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
+import CardActionArea from '@mui/material/CardActionArea'
 import CardActions from '@mui/material/CardActions'
 import CardContent from '@mui/material/CardContent'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -74,17 +76,19 @@ export function ProjectsPage() {
       >
         {projects?.map((project) => (
           <Card key={project.id} component="li" variant="outlined">
-            <CardContent>
-              <Typography variant="overline" color="text.secondary">
-                {project.key}
-              </Typography>
-              <Typography component="h2" variant="h6">
-                {project.name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {project.description}
-              </Typography>
-            </CardContent>
+            <CardActionArea component={RouterLink} to={`/projects/${project.id}`}>
+              <CardContent>
+                <Typography variant="overline" color="text.secondary">
+                  {project.key}
+                </Typography>
+                <Typography component="h2" variant="h6">
+                  {project.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {project.description}
+                </Typography>
+              </CardContent>
+            </CardActionArea>
             {canEditProject(user, project) && (
               <CardActions>
                 <Button

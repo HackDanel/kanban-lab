@@ -1,0 +1,6 @@
+bin/
+tmp/
+coverage.*
+**/*_test.go
+tests/
+scripts/

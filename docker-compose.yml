@@ -29,5 +29,64 @@ services:
       timeout: 3s
       retries: 10
 
+  backend:
+    build: ./backend
+    image: ${BACKEND_IMAGE:-kanban-backend:local}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgres://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD:-kanban}@postgres:5432/${POSTGRES_DB:-kanban}?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me-now}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      BCRYPT_COST: ${BCRYPT_COST:-12}
+      AUTH_RATE_LIMIT: ${AUTH_RATE_LIMIT:-20}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin-password}
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    image: ${WEB_IMAGE:-kanban-web:local}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.7.0
+    profiles: [monitoring]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    profiles: [monitoring]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   pgdata:
+  uploads:
+  promdata:
