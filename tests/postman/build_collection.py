@@ -42,7 +42,10 @@ def code(c):
     return f"pm.test('error code {c}', () => pm.expect(pm.response.json().code).to.eql('{c}'));"
 
 
-fast = "pm.test('response under 200 ms', () => pm.expect(pm.response.responseTime).to.be.below(200));"
+# The limit is 200 ms by default; a smoke run over the internet raises it with
+# --env-var maxResponseMs=..., since network latency alone exceeds 200 ms there.
+fast = ("const limit = Number(pm.variables.get('maxResponseMs') || 200); "
+        "pm.test(`response under ${limit} ms`, () => pm.expect(pm.response.responseTime).to.be.below(limit));")
 
 req("Readiness", "GET", "/readyz", auth=False, tests=[status(200), "pm.test('dependencies up', () => pm.expect(pm.response.json()).to.eql({postgres: 'up', redis: 'up'}));"])
 

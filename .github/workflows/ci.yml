@@ -292,7 +292,7 @@ jobs:
           curl -fsS "${{ vars.STAGING_URL }}/readyz"
           curl -fsS -o /dev/null "${{ vars.STAGING_URL }}/"
           npx --yes newman@6 run tests/postman/kanban.postman_collection.json \
-            --env-var baseUrl="${{ vars.STAGING_URL }}" \
+            --env-var baseUrl="${{ vars.STAGING_URL }}" --env-var maxResponseMs=3000 \
             --env-var adminEmail="${{ secrets.STAGING_ADMIN_EMAIL }}" \
             --env-var adminPassword="${{ secrets.STAGING_ADMIN_PASSWORD }}"
 

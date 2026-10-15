@@ -364,7 +364,7 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('status 201', () => pm.response.to.have.status(201));",
-              "pm.test('response under 200 ms', () => pm.expect(pm.response.responseTime).to.be.below(200));",
+              "const limit = Number(pm.variables.get('maxResponseMs') || 200); pm.test(`response under ${limit} ms`, () => pm.expect(pm.response.responseTime).to.be.below(limit));",
               "pm.collectionVariables.set('projectId', pm.response.json().id);"
             ]
           }
@@ -635,7 +635,7 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('status 201', () => pm.response.to.have.status(201));",
-              "pm.test('response under 200 ms', () => pm.expect(pm.response.responseTime).to.be.below(200));",
+              "const limit = Number(pm.variables.get('maxResponseMs') || 200); pm.test(`response under ${limit} ms`, () => pm.expect(pm.response.responseTime).to.be.below(limit));",
               "const c = pm.response.json();",
               "pm.test('fields stored', () => { pm.expect(c.priority).to.eql('high'); pm.expect(c.dueDate).to.eql('2027-01-31'); pm.expect(c.labelIds).to.eql([pm.collectionVariables.get('labelId')]); });",
               "pm.collectionVariables.set('card1', c.id);"
@@ -907,7 +907,7 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('status 200', () => pm.response.to.have.status(200));",
-              "pm.test('response under 200 ms', () => pm.expect(pm.response.responseTime).to.be.below(200));",
+              "const limit = Number(pm.variables.get('maxResponseMs') || 200); pm.test(`response under ${limit} ms`, () => pm.expect(pm.response.responseTime).to.be.below(limit));",
               "const r = pm.response.json();",
               "pm.test('one match', () => { pm.expect(r.total).to.eql(1); pm.expect(r.items[0].title).to.eql('Reports'); });"
             ]
