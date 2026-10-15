@@ -70,7 +70,7 @@ func (q *Queries) CreateLabel(ctx context.Context, arg CreateLabelParams) (Label
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (key, name, description, owner_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, key, name, description, owner_id, card_seq, created_at, updated_at
+RETURNING id, key, name, description, owner_id, created_at, updated_at
 `
 
 type CreateProjectParams struct {
@@ -94,7 +94,6 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Name,
 		&i.Description,
 		&i.OwnerID,
-		&i.CardSeq,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -142,7 +141,7 @@ func (q *Queries) GetLabel(ctx context.Context, id uuid.UUID) (Label, error) {
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, key, name, description, owner_id, card_seq, created_at, updated_at FROM projects WHERE id = $1
+SELECT id, key, name, description, owner_id, created_at, updated_at FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error) {
@@ -154,7 +153,6 @@ func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error)
 		&i.Name,
 		&i.Description,
 		&i.OwnerID,
-		&i.CardSeq,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -178,7 +176,7 @@ func (q *Queries) IsProjectMember(ctx context.Context, arg IsProjectMemberParams
 }
 
 const listAllProjects = `-- name: ListAllProjects :many
-SELECT id, key, name, description, owner_id, card_seq, created_at, updated_at FROM projects ORDER BY name, id
+SELECT id, key, name, description, owner_id, created_at, updated_at FROM projects ORDER BY name, id
 `
 
 func (q *Queries) ListAllProjects(ctx context.Context) ([]Project, error) {
@@ -196,7 +194,6 @@ func (q *Queries) ListAllProjects(ctx context.Context) ([]Project, error) {
 			&i.Name,
 			&i.Description,
 			&i.OwnerID,
-			&i.CardSeq,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -275,7 +272,7 @@ func (q *Queries) ListProjectMembers(ctx context.Context, projectID uuid.UUID) (
 }
 
 const listProjectsForMember = `-- name: ListProjectsForMember :many
-SELECT p.id, p.key, p.name, p.description, p.owner_id, p.card_seq, p.created_at, p.updated_at
+SELECT p.id, p.key, p.name, p.description, p.owner_id, p.created_at, p.updated_at
 FROM projects p
 JOIN project_members m ON m.project_id = p.id
 WHERE m.user_id = $1
@@ -297,7 +294,6 @@ func (q *Queries) ListProjectsForMember(ctx context.Context, userID uuid.UUID) (
 			&i.Name,
 			&i.Description,
 			&i.OwnerID,
-			&i.CardSeq,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -309,17 +305,6 @@ func (q *Queries) ListProjectsForMember(ctx context.Context, userID uuid.UUID) (
 		return nil, err
 	}
 	return items, nil
-}
-
-const nextCardNumber = `-- name: NextCardNumber :one
-UPDATE projects SET card_seq = card_seq + 1 WHERE id = $1 RETURNING card_seq
-`
-
-func (q *Queries) NextCardNumber(ctx context.Context, id uuid.UUID) (int32, error) {
-	row := q.db.QueryRow(ctx, nextCardNumber, id)
-	var card_seq int32
-	err := row.Scan(&card_seq)
-	return card_seq, err
 }
 
 const removeProjectMember = `-- name: RemoveProjectMember :execrows
@@ -386,7 +371,7 @@ SET name        = COALESCE($1, name),
     description = COALESCE($2, description),
     updated_at  = now()
 WHERE id = $3
-RETURNING id, key, name, description, owner_id, card_seq, created_at, updated_at
+RETURNING id, key, name, description, owner_id, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
@@ -404,7 +389,6 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.Name,
 		&i.Description,
 		&i.OwnerID,
-		&i.CardSeq,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

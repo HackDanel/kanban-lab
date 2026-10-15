@@ -1,7 +1,9 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -152,4 +154,33 @@ func realIP(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+var errNUL = domain.Invalid("", "Недопустимый символ NUL во входных данных")
+
+// rejectNUL answers 400 to requests carrying a NUL character in the URL or a
+// JSON body. PostgreSQL text cannot store NUL and fails the whole statement,
+// which would otherwise surface as a 500. Uploads are binary and exempt.
+func rejectNUL(log *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.ContainsRune(r.URL.Path, 0) || strings.Contains(strings.ToLower(r.URL.RawQuery), "%00") {
+				writeError(w, r, log, errNUL)
+				return
+			}
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") && r.Body != nil {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					writeError(w, r, log, validationError(err, http.StatusBadRequest))
+					return
+				}
+				if bytes.Contains(body, []byte(`\u0000`)) || bytes.IndexByte(body, 0) >= 0 {
+					writeError(w, r, log, errNUL)
+					return
+				}
+				r.Body = io.NopCloser(bytes.NewReader(body))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

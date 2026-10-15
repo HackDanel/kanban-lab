@@ -113,7 +113,6 @@ type Project struct {
 	Name        string
 	Description string
 	OwnerID     uuid.UUID
-	CardSeq     int32
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

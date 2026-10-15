@@ -4,6 +4,8 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    # pg_stat_statements: per-query timings for load test analysis
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-kanban}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kanban}

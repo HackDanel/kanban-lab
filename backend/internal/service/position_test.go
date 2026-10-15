@@ -90,3 +90,25 @@ func TestPositionAfterRepeatedInsertsStayOrdered(t *testing.T) {
 	}
 	t.Fatal("renumbering was never requested")
 }
+
+func TestPositionBetween(t *testing.T) {
+	f := func(v float64) *float64 { return &v }
+	cases := []struct {
+		prev, next *float64
+		pos        float64
+		renumber   bool
+	}{
+		{nil, nil, positionStep, false},
+		{nil, f(100), 100 - positionStep, false},
+		{f(100), nil, 100 + positionStep, false},
+		{f(100), f(200), 150, false},
+		{f(1), f(1 + minPositionGap/2), 0, true},
+	}
+	for _, tc := range cases {
+		pos, renumber := positionBetween(tc.prev, tc.next)
+		assert.Equal(t, tc.renumber, renumber)
+		if !tc.renumber {
+			assert.Equal(t, tc.pos, pos)
+		}
+	}
+}

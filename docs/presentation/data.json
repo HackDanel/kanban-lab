@@ -1,0 +1,51 @@
+{
+  "author": "Студент группы 360",
+  "fr": 19,
+  "nfr": 12,
+  "testCases": 30,
+  "totalAutomated": 273,
+  "levels": [
+    { "label": "E2E (×3 браузера)", "count": 17, "color": "accent6" },
+    { "label": "API, Newman", "count": 33, "color": "accent4" },
+    { "label": "Интеграционные", "count": 37, "color": "accent2" },
+    { "label": "Модульные, сервер", "count": 46, "color": "accent1" },
+    { "label": "Модульные, клиент", "count": 140, "color": "accent1" }
+  ],
+  "tools": [
+    "go test, testify, testcontainers",
+    "Vitest, React Testing Library, MSW",
+    "Postman + Newman",
+    "Playwright: Chrome, Firefox, Edge",
+    "k6: 1000 пользователей, 1000 RPS",
+    "ZAP, Trivy, gosec, govulncheck"
+  ],
+  "coverage": { "lines": [94, 91], "branches": [87, 82] },
+  "e2e": 17,
+  "newmanRequests": 33,
+  "newmanAssertions": 66,
+  "load": {
+    "headline": "Нагрузка: TODO",
+    "stats": [],
+    "findings": [],
+    "notes": ""
+  },
+  "security": [],
+  "bugs": {
+    "total": 13,
+    "bySource": [
+      ["Нагрузочный тест", 2],
+      ["E2E", 3],
+      ["Интеграционные", 3],
+      ["Сканеры и анализ", 2],
+      ["Ручная проверка", 2],
+      ["Модульные", 1]
+    ],
+    "highlights": [
+      "Поиск возвращал пустой список: пустой массив уходил в SQL как NULL",
+      "Под нагрузкой Nginx исчерпывал порты — 31,7 % ошибок",
+      "Загрузка файлов падала в Docker из-за прав на том",
+      "Rate limit входа обходился подменой X-Real-IP"
+    ]
+  },
+  "summary": "TODO"
+}

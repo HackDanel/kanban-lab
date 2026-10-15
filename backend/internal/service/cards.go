@@ -188,17 +188,15 @@ func (s *Service) ListCards(ctx context.Context, actor domain.Actor, boardID uui
 	labels := dedupe(f.LabelIDs)
 	pattern := likePattern(f.Query)
 
-	cards, err := s.store.ListCards(ctx, repository.ListCardsParams{
-		BoardID: boardID, ColumnID: nullUUID(f.ColumnID), AssigneeID: nullUUID(f.AssigneeID),
-		Priority: f.Priority, Pattern: pattern, LabelIds: labels, PageLimit: limit, PageOffset: offset,
-	})
+	search := repository.CardSearch{
+		BoardID: boardID, ColumnID: f.ColumnID, AssigneeID: f.AssigneeID, Priority: f.Priority,
+		Pattern: pattern, LabelIDs: labels, Limit: limit, Offset: offset,
+	}
+	cards, err := s.store.SearchCards(ctx, search)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list cards: %w", err)
 	}
-	total, err := s.store.CountCards(ctx, repository.CountCardsParams{
-		BoardID: boardID, ColumnID: nullUUID(f.ColumnID), AssigneeID: nullUUID(f.AssigneeID),
-		Priority: f.Priority, Pattern: pattern, LabelIds: labels,
-	})
+	total, err := s.store.CountSearchCards(ctx, search)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count cards: %w", err)
 	}
@@ -216,28 +214,44 @@ func (s *Service) CreateCard(ctx context.Context, actor domain.Actor, columnID u
 	validatePriority(&v, in.Priority)
 	labels := dedupe(in.LabelIDs)
 
+	column, board, err := loadColumn(ctx, s.store.Queries, actor, columnID, false)
+	if err != nil {
+		return repository.CardView{}, err
+	}
+	if err := v.err(); err != nil {
+		return repository.CardView{}, err
+	}
+	if err := checkCardRefs(ctx, s.store.Queries, board.ProjectID, in.AssigneeID, labels); err != nil {
+		return repository.CardView{}, err
+	}
+	if column.WipLimit != nil {
+		// Fail fast without taking the number; the check is repeated under the lock below.
+		if err := checkWipLimit(ctx, s.store.Queries, column); err != nil {
+			return repository.CardView{}, err
+		}
+	}
+	// Numbers come from a per-project sequence, which never blocks concurrent
+	// creators. A failed creation leaves a gap in numbering, as in Jira.
+	number, err := s.store.NextCardNumber(ctx, board.ProjectID)
+	if err != nil {
+		return repository.CardView{}, fmt.Errorf("next card number: %w", err)
+	}
+
 	var card repository.CardView
-	err := s.store.InTx(ctx, func(q *repository.Queries) error {
-		_, board, err := loadColumn(ctx, q, actor, columnID, false)
-		if err != nil {
-			return err
-		}
-		if err := v.err(); err != nil {
-			return err
-		}
-		if err := checkCardRefs(ctx, q, board.ProjectID, in.AssigneeID, labels); err != nil {
-			return err
-		}
-		column, err := q.LockColumn(ctx, columnID)
-		if err != nil {
-			return fmt.Errorf("lock column: %w", err)
-		}
-		if err := checkWipLimit(ctx, q, column); err != nil {
-			return err
-		}
-		number, err := q.NextCardNumber(ctx, board.ProjectID)
-		if err != nil {
-			return fmt.Errorf("next card number: %w", err)
+	err = s.store.InTx(ctx, func(q *repository.Queries) error {
+		// Only a column with a WIP limit needs to be locked: the lock makes the
+		// count-then-insert atomic. Without a limit concurrent inserts are fine.
+		if column.WipLimit != nil {
+			locked, err := q.LockColumn(ctx, columnID)
+			if repository.IsNotFound(err) {
+				return domain.NotFound("Колонка")
+			}
+			if err != nil {
+				return fmt.Errorf("lock column: %w", err)
+			}
+			if err := checkWipLimit(ctx, q, locked); err != nil {
+				return err
+			}
 		}
 		last, err := q.MaxCardPosition(ctx, columnID)
 		if err != nil {
@@ -248,6 +262,9 @@ func (s *Service) CreateCard(ctx context.Context, actor domain.Actor, columnID u
 			Title: title, Description: description, Priority: in.Priority, Position: last + positionStep,
 			AssigneeID: nullUUID(in.AssigneeID), ReporterID: actor.ID, DueDate: in.DueDate,
 		})
+		if repository.IsForeignKeyViolation(err) {
+			return domain.NotFound("Колонка") // deleted concurrently
+		}
 		if err != nil {
 			return fmt.Errorf("create card: %w", err)
 		}
@@ -376,6 +393,56 @@ func (s *Service) UpdateCard(ctx context.Context, actor domain.Actor, id uuid.UU
 	return card, nil
 }
 
+// cardPosition finds the position for card id placed after another card of
+// the column, or first when after is nil. Only the two neighbours are read,
+// through the (column_id, position) index, however long the column is.
+func cardPosition(ctx context.Context, q *repository.Queries, columnID, id uuid.UUID, after *uuid.UUID) (float64, error) {
+	if after != nil && *after == id {
+		return 0, errAnchorNotFound("afterCardId")
+	}
+	optional := func(v float64, err error) (*float64, error) {
+		if repository.IsNotFound(err) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		return &v, nil
+	}
+	for attempt := 0; ; attempt++ {
+		var prev, next *float64
+		var err error
+		if after == nil {
+			next, err = optional(q.FirstCardPosition(ctx, repository.FirstCardPositionParams{ColumnID: columnID, ExcludeID: id}))
+		} else {
+			p, perr := q.CardPosition(ctx, repository.CardPositionParams{ID: *after, ColumnID: columnID})
+			if repository.IsNotFound(perr) {
+				return 0, errAnchorNotFound("afterCardId")
+			}
+			if perr != nil {
+				return 0, fmt.Errorf("anchor position: %w", perr)
+			}
+			prev = &p
+			next, err = optional(q.NextCardPosition(ctx, repository.NextCardPositionParams{
+				ColumnID: columnID, ExcludeID: id, AfterPosition: p, AfterID: *after,
+			}))
+		}
+		if err != nil {
+			return 0, fmt.Errorf("neighbour position: %w", err)
+		}
+		pos, renumber := positionBetween(prev, next)
+		if !renumber {
+			return pos, nil
+		}
+		if attempt > 0 {
+			return 0, fmt.Errorf("positions still too close after renumbering")
+		}
+		if err := q.RenumberCards(ctx, columnID); err != nil {
+			return 0, fmt.Errorf("renumber: %w", err)
+		}
+	}
+}
+
 func sameDate(a, b *time.Time) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil
@@ -402,30 +469,24 @@ func (s *Service) MoveCard(ctx context.Context, actor domain.Actor, id, columnID
 		if err != nil {
 			return err
 		}
-		target, err := q.LockColumn(ctx, columnID)
+		target, err := q.GetColumn(ctx, columnID)
 		if repository.IsNotFound(err) || (err == nil && target.BoardID != current.BoardID) {
 			return domain.Invalid("columnId", "Колонка не найдена на доске карточки")
 		}
 		if err != nil {
-			return fmt.Errorf("lock column: %w", err)
+			return fmt.Errorf("get column: %w", err)
 		}
 		changesColumn := target.ID != current.ColumnID
-		if changesColumn {
+		if changesColumn && target.WipLimit != nil {
+			// Locked only when a limit has to be enforced, see CreateCard.
+			if target, err = q.LockColumn(ctx, columnID); err != nil {
+				return fmt.Errorf("lock column: %w", err)
+			}
 			if err := checkWipLimit(ctx, q, target); err != nil {
 				return err
 			}
 		}
-		pos, err := placeInList(ctx, after, "afterCardId",
-			func() ([]placed, error) {
-				rows, err := q.CardPositions(ctx, repository.CardPositionsParams{ColumnID: columnID, ExcludeID: id})
-				out := make([]placed, len(rows))
-				for i, r := range rows {
-					out[i] = placed{r.ID, r.Position}
-				}
-				return out, err
-			},
-			func() error { return q.RenumberCards(ctx, columnID) },
-		)
+		pos, err := cardPosition(ctx, q, columnID, id, after)
 		if err != nil {
 			return err
 		}

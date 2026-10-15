@@ -118,3 +118,19 @@ func TestRealtimeEvents(t *testing.T) {
 	}
 	assert.Equal(t, []string{"card.created", "card.moved"}, types)
 }
+
+// Found by the OWASP ZAP API scan: a NUL byte in a query parameter made
+// PostgreSQL reject the statement and the API answered 500.
+func TestNULCharactersAreRejected(t *testing.T) {
+	f := newFixture(t)
+	for _, path := range []string{
+		"/users?q=%27%22%00%3Cscript%3E",
+		"/boards/" + f.board.Id.String() + "/cards?q=a%00b",
+	} {
+		expectError(t, f.owner.do(http.MethodGet, path, nil), http.StatusBadRequest, "VALIDATION_ERROR")
+	}
+	body := strings.NewReader(`{"title": "a\u0000b"}`)
+	expectError(t, f.owner.send(http.MethodPost, columnPath(f.todo, "/cards"), body, "application/json", nil), http.StatusBadRequest, "VALIDATION_ERROR")
+	login := strings.NewReader(`{"email": "a\u0000@example.com", "password": "x"}`)
+	expectError(t, newClient(t).send(http.MethodPost, "/auth/login", login, "application/json", nil), http.StatusBadRequest, "VALIDATION_ERROR")
+}

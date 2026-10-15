@@ -11,36 +11,6 @@ SELECT * FROM card_views WHERE id = @id;
 -- name: LockCard :one
 SELECT id FROM cards WHERE id = @id FOR UPDATE;
 
--- name: ListCards :many
-SELECT * FROM card_views c
-WHERE c.board_id = @board_id
-  AND (sqlc.narg('column_id')::uuid IS NULL OR c.column_id = sqlc.narg('column_id'))
-  AND (sqlc.narg('assignee_id')::uuid IS NULL OR c.assignee_id = sqlc.narg('assignee_id'))
-  AND (sqlc.narg('priority')::text IS NULL OR c.priority = sqlc.narg('priority'))
-  AND (sqlc.narg('pattern')::text IS NULL
-       OR c.title ILIKE sqlc.narg('pattern')
-       OR c.description ILIKE sqlc.narg('pattern'))
-  AND (COALESCE(cardinality(@label_ids::uuid[]), 0) = 0
-       OR (SELECT count(*) FROM card_labels cl
-           WHERE cl.card_id = c.id AND cl.label_id = ANY (@label_ids::uuid[]))
-          = cardinality(@label_ids::uuid[]))
-ORDER BY c.column_id, c.position, c.id
-LIMIT @page_limit OFFSET @page_offset;
-
--- name: CountCards :one
-SELECT count(*) FROM cards c
-WHERE c.board_id = @board_id
-  AND (sqlc.narg('column_id')::uuid IS NULL OR c.column_id = sqlc.narg('column_id'))
-  AND (sqlc.narg('assignee_id')::uuid IS NULL OR c.assignee_id = sqlc.narg('assignee_id'))
-  AND (sqlc.narg('priority')::text IS NULL OR c.priority = sqlc.narg('priority'))
-  AND (sqlc.narg('pattern')::text IS NULL
-       OR c.title ILIKE sqlc.narg('pattern')
-       OR c.description ILIKE sqlc.narg('pattern'))
-  AND (COALESCE(cardinality(@label_ids::uuid[]), 0) = 0
-       OR (SELECT count(*) FROM card_labels cl
-           WHERE cl.card_id = c.id AND cl.label_id = ANY (@label_ids::uuid[]))
-          = cardinality(@label_ids::uuid[]));
-
 -- name: UpdateCardFields :exec
 UPDATE cards
 SET title       = @title,
@@ -63,10 +33,20 @@ SELECT count(*) FROM cards WHERE column_id = @column_id;
 -- name: MaxCardPosition :one
 SELECT COALESCE(max(position), 0)::double precision FROM cards WHERE column_id = @column_id;
 
--- name: CardPositions :many
-SELECT id, position FROM cards
+-- name: CardPosition :one
+SELECT position FROM cards WHERE id = @id AND column_id = @column_id;
+
+-- name: FirstCardPosition :one
+SELECT position FROM cards
 WHERE column_id = @column_id AND id <> @exclude_id
-ORDER BY position, id;
+ORDER BY position, id
+LIMIT 1;
+
+-- name: NextCardPosition :one
+SELECT position FROM cards
+WHERE column_id = @column_id AND id <> @exclude_id AND (position, id) > (@after_position::double precision, @after_id::uuid)
+ORDER BY position, id
+LIMIT 1;
 
 -- name: RenumberCards :exec
 UPDATE cards c

@@ -27,9 +27,6 @@ RETURNING *;
 -- name: DeleteProject :execrows
 DELETE FROM projects WHERE id = @id;
 
--- name: NextCardNumber :one
-UPDATE projects SET card_seq = card_seq + 1 WHERE id = @id RETURNING card_seq;
-
 -- name: IsProjectMember :one
 SELECT EXISTS (SELECT 1 FROM project_members WHERE project_id = @project_id AND user_id = @user_id);
 

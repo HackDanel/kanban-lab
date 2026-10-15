@@ -82,7 +82,7 @@ func NewRouter(cfg Config) (http.Handler, error) {
 		},
 	})
 	r.Group(func(g chi.Router) {
-		g.Use(limitBody(cfg.UploadMaxBytes), authenticate(cfg.Service.Authenticate), rateLimitAuth(cfg.Limiter, cfg.Log), validator)
+		g.Use(limitBody(cfg.UploadMaxBytes), rejectNUL(cfg.Log), authenticate(cfg.Service.Authenticate), rateLimitAuth(cfg.Limiter, cfg.Log), validator)
 		api.HandlerWithOptions(strict, api.ChiServerOptions{
 			BaseURL: apiBase, BaseRouter: g,
 			ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {

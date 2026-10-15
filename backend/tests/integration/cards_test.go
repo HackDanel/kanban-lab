@@ -1,9 +1,11 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 
@@ -299,4 +301,31 @@ func TestDeleteCard(t *testing.T) {
 	expectError(t, dev.do(http.MethodGet, cardPath(card, ""), nil), http.StatusNotFound, "NOT_FOUND")
 	expectError(t, dev.do(http.MethodDelete, cardPath(card, ""), nil), http.StatusNotFound, "NOT_FOUND")
 	expectError(t, dev.do(http.MethodGet, cardPath(card, "/activity"), nil), http.StatusNotFound, "NOT_FOUND")
+}
+
+func TestCardNumbersUnderConcurrency(t *testing.T) {
+	f := newFixture(t)
+	const n = 20
+	numbers := make([]int, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			numbers[i] = decode[api.Card](t, f.owner.do(http.MethodPost, columnPath(f.todo, "/cards"), map[string]any{"title": fmt.Sprintf("c%d", i)}), http.StatusCreated).Number
+		})
+	}
+	wg.Wait()
+	seen := map[int]bool{}
+	for _, num := range numbers {
+		assert.False(t, seen[num], "number %d issued twice", num)
+		seen[num] = true
+		assert.True(t, num >= 1 && num <= n, "number %d out of range", num)
+	}
+
+	var exists bool
+	seq := "card_seq_" + strings.ReplaceAll(f.project.Id.String(), "-", "")
+	require.NoError(t, pool.QueryRow(context.Background(), "SELECT to_regclass($1) IS NOT NULL", seq).Scan(&exists))
+	assert.True(t, exists)
+	require.Equal(t, http.StatusNoContent, f.owner.do(http.MethodDelete, projectPath(f.project, ""), nil).status)
+	require.NoError(t, pool.QueryRow(context.Background(), "SELECT to_regclass($1) IS NOT NULL", seq).Scan(&exists))
+	assert.False(t, exists, "the sequence is dropped with the project")
 }

@@ -19,6 +19,24 @@ type placed struct {
 	Position float64
 }
 
+// positionBetween returns a position strictly between two neighbours, either
+// of which may be absent. renumber is true when they are too close to fit a
+// value between them.
+func positionBetween(prev, next *float64) (pos float64, renumber bool) {
+	switch {
+	case prev == nil && next == nil:
+		return positionStep, false
+	case prev == nil:
+		return *next - positionStep, false
+	case next == nil:
+		return *prev + positionStep, false
+	case *next-*prev < minPositionGap:
+		return 0, true
+	default:
+		return *prev + (*next-*prev)/2, false
+	}
+}
+
 // positionAfter returns the position for an item inserted into siblings — the
 // ordered list without the item itself — right after the item with id after,
 // or at the head when after is nil. renumber is true when neighbours are too
@@ -26,24 +44,27 @@ type placed struct {
 // and call positionAfter again.
 func positionAfter(siblings []placed, after *uuid.UUID, field string) (pos float64, renumber bool, err error) {
 	if after == nil {
-		if len(siblings) == 0 {
-			return positionStep, false, nil
+		var next *float64
+		if len(siblings) > 0 {
+			next = &siblings[0].Position
 		}
-		return siblings[0].Position - positionStep, false, nil
+		pos, renumber = positionBetween(nil, next)
+		return pos, renumber, nil
 	}
-
 	for i, s := range siblings {
 		if s.ID != *after {
 			continue
 		}
-		if i == len(siblings)-1 {
-			return s.Position + positionStep, false, nil
+		var next *float64
+		if i+1 < len(siblings) {
+			next = &siblings[i+1].Position
 		}
-		next := siblings[i+1].Position
-		if next-s.Position < minPositionGap {
-			return 0, true, nil
-		}
-		return s.Position + (next-s.Position)/2, false, nil
+		pos, renumber = positionBetween(&s.Position, next)
+		return pos, renumber, nil
 	}
-	return 0, false, domain.Invalid(field, "Элемент, после которого нужно вставить, не найден в целевом списке")
+	return 0, false, errAnchorNotFound(field)
+}
+
+func errAnchorNotFound(field string) error {
+	return domain.Invalid(field, "Элемент, после которого нужно вставить, не найден в целевом списке")
 }

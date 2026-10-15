@@ -27,40 +27,20 @@ func (q *Queries) AddCardLabels(ctx context.Context, arg AddCardLabelsParams) er
 	return err
 }
 
-const cardPositions = `-- name: CardPositions :many
-SELECT id, position FROM cards
-WHERE column_id = $1 AND id <> $2
-ORDER BY position, id
+const cardPosition = `-- name: CardPosition :one
+SELECT position FROM cards WHERE id = $1 AND column_id = $2
 `
 
-type CardPositionsParams struct {
-	ColumnID  uuid.UUID
-	ExcludeID uuid.UUID
-}
-
-type CardPositionsRow struct {
+type CardPositionParams struct {
 	ID       uuid.UUID
-	Position float64
+	ColumnID uuid.UUID
 }
 
-func (q *Queries) CardPositions(ctx context.Context, arg CardPositionsParams) ([]CardPositionsRow, error) {
-	rows, err := q.db.Query(ctx, cardPositions, arg.ColumnID, arg.ExcludeID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CardPositionsRow{}
-	for rows.Next() {
-		var i CardPositionsRow
-		if err := rows.Scan(&i.ID, &i.Position); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) CardPosition(ctx context.Context, arg CardPositionParams) (float64, error) {
+	row := q.db.QueryRow(ctx, cardPosition, arg.ID, arg.ColumnID)
+	var position float64
+	err := row.Scan(&position)
+	return position, err
 }
 
 const clearCardLabels = `-- name: ClearCardLabels :exec
@@ -70,44 +50,6 @@ DELETE FROM card_labels WHERE card_id = $1
 func (q *Queries) ClearCardLabels(ctx context.Context, cardID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, clearCardLabels, cardID)
 	return err
-}
-
-const countCards = `-- name: CountCards :one
-SELECT count(*) FROM cards c
-WHERE c.board_id = $1
-  AND ($2::uuid IS NULL OR c.column_id = $2)
-  AND ($3::uuid IS NULL OR c.assignee_id = $3)
-  AND ($4::text IS NULL OR c.priority = $4)
-  AND ($5::text IS NULL
-       OR c.title ILIKE $5
-       OR c.description ILIKE $5)
-  AND (COALESCE(cardinality($6::uuid[]), 0) = 0
-       OR (SELECT count(*) FROM card_labels cl
-           WHERE cl.card_id = c.id AND cl.label_id = ANY ($6::uuid[]))
-          = cardinality($6::uuid[]))
-`
-
-type CountCardsParams struct {
-	BoardID    uuid.UUID
-	ColumnID   uuid.NullUUID
-	AssigneeID uuid.NullUUID
-	Priority   *string
-	Pattern    *string
-	LabelIds   []uuid.UUID
-}
-
-func (q *Queries) CountCards(ctx context.Context, arg CountCardsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countCards,
-		arg.BoardID,
-		arg.ColumnID,
-		arg.AssigneeID,
-		arg.Priority,
-		arg.Pattern,
-		arg.LabelIds,
-	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 const countCardsInColumn = `-- name: CountCardsInColumn :one
@@ -260,6 +202,25 @@ func (q *Queries) DeleteComment(ctx context.Context, id uuid.UUID) (int64, error
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const firstCardPosition = `-- name: FirstCardPosition :one
+SELECT position FROM cards
+WHERE column_id = $1 AND id <> $2
+ORDER BY position, id
+LIMIT 1
+`
+
+type FirstCardPositionParams struct {
+	ColumnID  uuid.UUID
+	ExcludeID uuid.UUID
+}
+
+func (q *Queries) FirstCardPosition(ctx context.Context, arg FirstCardPositionParams) (float64, error) {
+	row := q.db.QueryRow(ctx, firstCardPosition, arg.ColumnID, arg.ExcludeID)
+	var position float64
+	err := row.Scan(&position)
+	return position, err
 }
 
 const getAttachment = `-- name: GetAttachment :one
@@ -502,81 +463,6 @@ func (q *Queries) ListAttachments(ctx context.Context, cardID uuid.UUID) ([]Atta
 	return items, nil
 }
 
-const listCards = `-- name: ListCards :many
-SELECT id, project_id, board_id, column_id, number, title, description, priority, position, assignee_id, reporter_id, due_date, created_at, updated_at, label_ids, comment_count, attachment_count FROM card_views c
-WHERE c.board_id = $1
-  AND ($2::uuid IS NULL OR c.column_id = $2)
-  AND ($3::uuid IS NULL OR c.assignee_id = $3)
-  AND ($4::text IS NULL OR c.priority = $4)
-  AND ($5::text IS NULL
-       OR c.title ILIKE $5
-       OR c.description ILIKE $5)
-  AND (COALESCE(cardinality($6::uuid[]), 0) = 0
-       OR (SELECT count(*) FROM card_labels cl
-           WHERE cl.card_id = c.id AND cl.label_id = ANY ($6::uuid[]))
-          = cardinality($6::uuid[]))
-ORDER BY c.column_id, c.position, c.id
-LIMIT $8 OFFSET $7
-`
-
-type ListCardsParams struct {
-	BoardID    uuid.UUID
-	ColumnID   uuid.NullUUID
-	AssigneeID uuid.NullUUID
-	Priority   *string
-	Pattern    *string
-	LabelIds   []uuid.UUID
-	PageOffset int32
-	PageLimit  int32
-}
-
-func (q *Queries) ListCards(ctx context.Context, arg ListCardsParams) ([]CardView, error) {
-	rows, err := q.db.Query(ctx, listCards,
-		arg.BoardID,
-		arg.ColumnID,
-		arg.AssigneeID,
-		arg.Priority,
-		arg.Pattern,
-		arg.LabelIds,
-		arg.PageOffset,
-		arg.PageLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CardView{}
-	for rows.Next() {
-		var i CardView
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.BoardID,
-			&i.ColumnID,
-			&i.Number,
-			&i.Title,
-			&i.Description,
-			&i.Priority,
-			&i.Position,
-			&i.AssigneeID,
-			&i.ReporterID,
-			&i.DueDate,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LabelIds,
-			&i.CommentCount,
-			&i.AttachmentCount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listComments = `-- name: ListComments :many
 SELECT id, card_id, author_id, body, created_at, updated_at FROM comments WHERE card_id = $1 ORDER BY created_at, id
 `
@@ -628,6 +514,32 @@ func (q *Queries) MaxCardPosition(ctx context.Context, columnID uuid.UUID) (floa
 	var column_1 float64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const nextCardPosition = `-- name: NextCardPosition :one
+SELECT position FROM cards
+WHERE column_id = $1 AND id <> $2 AND (position, id) > ($3::double precision, $4::uuid)
+ORDER BY position, id
+LIMIT 1
+`
+
+type NextCardPositionParams struct {
+	ColumnID      uuid.UUID
+	ExcludeID     uuid.UUID
+	AfterPosition float64
+	AfterID       uuid.UUID
+}
+
+func (q *Queries) NextCardPosition(ctx context.Context, arg NextCardPositionParams) (float64, error) {
+	row := q.db.QueryRow(ctx, nextCardPosition,
+		arg.ColumnID,
+		arg.ExcludeID,
+		arg.AfterPosition,
+		arg.AfterID,
+	)
+	var position float64
+	err := row.Scan(&position)
+	return position, err
 }
 
 const renumberCards = `-- name: RenumberCards :exec

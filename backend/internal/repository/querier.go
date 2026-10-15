@@ -13,10 +13,9 @@ import (
 type Querier interface {
 	AddCardLabels(ctx context.Context, arg AddCardLabelsParams) error
 	AddProjectMember(ctx context.Context, arg AddProjectMemberParams) error
-	CardPositions(ctx context.Context, arg CardPositionsParams) ([]CardPositionsRow, error)
+	CardPosition(ctx context.Context, arg CardPositionParams) (float64, error)
 	ClearCardLabels(ctx context.Context, cardID uuid.UUID) error
 	ColumnPositions(ctx context.Context, arg ColumnPositionsParams) ([]ColumnPositionsRow, error)
-	CountCards(ctx context.Context, arg CountCardsParams) (int64, error)
 	CountCardsInColumn(ctx context.Context, columnID uuid.UUID) (int64, error)
 	CountLabelsInProject(ctx context.Context, arg CountLabelsInProjectParams) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
@@ -38,6 +37,7 @@ type Querier interface {
 	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteLabel(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteProject(ctx context.Context, id uuid.UUID) (int64, error)
+	FirstCardPosition(ctx context.Context, arg FirstCardPositionParams) (float64, error)
 	GetAttachment(ctx context.Context, id uuid.UUID) (Attachment, error)
 	GetBoard(ctx context.Context, id uuid.UUID) (Board, error)
 	GetCard(ctx context.Context, id uuid.UUID) (CardView, error)
@@ -57,7 +57,6 @@ type Querier interface {
 	ListAttachmentKeysForProject(ctx context.Context, projectID uuid.UUID) ([]string, error)
 	ListAttachments(ctx context.Context, cardID uuid.UUID) ([]Attachment, error)
 	ListBoards(ctx context.Context, projectID uuid.UUID) ([]Board, error)
-	ListCards(ctx context.Context, arg ListCardsParams) ([]CardView, error)
 	ListColumns(ctx context.Context, boardID uuid.UUID) ([]ListColumnsRow, error)
 	ListComments(ctx context.Context, cardID uuid.UUID) ([]Comment, error)
 	ListLabels(ctx context.Context, projectID uuid.UUID) ([]Label, error)
@@ -69,7 +68,7 @@ type Querier interface {
 	LockColumn(ctx context.Context, id uuid.UUID) (BoardColumn, error)
 	MaxCardPosition(ctx context.Context, columnID uuid.UUID) (float64, error)
 	MaxColumnPosition(ctx context.Context, boardID uuid.UUID) (float64, error)
-	NextCardNumber(ctx context.Context, id uuid.UUID) (int32, error)
+	NextCardPosition(ctx context.Context, arg NextCardPositionParams) (float64, error)
 	RemoveProjectMember(ctx context.Context, arg RemoveProjectMemberParams) (int64, error)
 	RenameBoard(ctx context.Context, arg RenameBoardParams) (Board, error)
 	RenameColumn(ctx context.Context, arg RenameColumnParams) error

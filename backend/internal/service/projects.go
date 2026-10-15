@@ -64,6 +64,9 @@ func (s *Service) CreateProject(ctx context.Context, actor domain.Actor, in Proj
 		if err != nil {
 			return fmt.Errorf("create project: %w", err)
 		}
+		if err := q.CreateCardSequence(ctx, project.ID); err != nil {
+			return fmt.Errorf("create card sequence: %w", err)
+		}
 		return q.AddProjectMember(ctx, repository.AddProjectMemberParams{ProjectID: project.ID, UserID: actor.ID})
 	})
 	return project, err
@@ -113,7 +116,7 @@ func (s *Service) DeleteProject(ctx context.Context, actor domain.Actor, id uuid
 		if _, err := q.DeleteProject(ctx, id); err != nil {
 			return fmt.Errorf("delete project: %w", err)
 		}
-		return nil
+		return q.DropCardSequence(ctx, id)
 	})
 	if err != nil {
 		return err
