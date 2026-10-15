@@ -109,17 +109,17 @@ s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Введение' })
 title(s, 'Что требовалось сделать')
 ;[
   ['Разработать', C.accent1, 'Kanban-доску уровня Jira', 'Проекты, доски, колонки с WIP-лимитами, карточки с исполнителем, метками, комментариями, вложениями и историей; роли и права доступа'],
-  ['Протестировать', C.accent2, 'Восемь видов тестирования', 'Модульное, интеграционное, API, E2E, нагрузочное, безопасность, юзабилити, регрессионное'],
+  ['Протестировать', C.accent2, '8 видов тестирования', 'Модульное, интеграционное, API, E2E, нагрузочное, безопасность, юзабилити, регрессионное'],
   ['Автоматизировать', C.accent4, 'CI/CD', 'Каждый пуш проходит линтеры, тесты, сканеры и выкатывается на staging, из main — на production'],
-].forEach(([chip, col, head, body], i) => card(s, { x: M + i * 4.1, y: 1.6, w: 3.85, h: 4.6, chip, chipColor: col, head, body, bodySize: 16, name: `task-${i}` }))
+].forEach(([chip, col, head, body], i) => card(s, { x: M + i * 4.1, y: 1.8, w: 3.85, h: 3.6, chip, chipColor: col, head, body, bodySize: 16, name: `task-${i}` }))
 notes(s, 'Три части работы: продукт, тестирование всеми требуемыми видами, автоматизация в пайплайне.')
 
 // 3. Требования
 s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Введение' })
 title(s, 'Требования прослежены до тестов')
-stat(s, { x: M, y: 1.8, w: 3.6, value: String(DATA.fr), label: 'функциональных требований, каждое связано с эндпоинтом и тест-кейсом', name: 'fr' })
-stat(s, { x: M + 4.1, y: 1.8, w: 3.6, value: String(DATA.nfr), label: 'нефункциональных: отклик, 10 000 карточек, безопасность, покрытие', color: C.accent2, name: 'nfr' })
-stat(s, { x: M + 8.2, y: 1.8, w: 3.6, value: String(DATA.testCases), label: 'тест-кейсов: 8 из методички и 22 дополнительных', color: C.accent4, name: 'tc' })
+stat(s, { x: M, y: 2.4, w: 3.6, value: String(DATA.fr), label: 'функциональных требований, каждое связано с эндпоинтом и тест-кейсом', name: 'fr' })
+stat(s, { x: M + 4.1, y: 2.4, w: 3.6, value: String(DATA.nfr), label: 'нефункциональных: отклик, 10 000 карточек, безопасность, покрытие', color: C.accent2, name: 'nfr' })
+stat(s, { x: M + 8.2, y: 2.4, w: 3.6, value: String(DATA.testCases), label: 'тест-кейсов: 8 из методички и 22 дополнительных', color: C.accent4, name: 'tc' })
 s.addText('Вне объёма: уведомления и восстановление пароля — опциональные по методичке; TC-08 отмечен неприменимым', { x: M, y: 5.4, w: W - 2 * M, h: 0.6, fontSize: 14, italic: true, color: '6B7785', isTextBox: true, objectName: 'scope-note' })
 notes(s, 'Матрица трассировки — docs/requirements.md, тест-кейсы — docs/test-cases.md.')
 
@@ -148,19 +148,19 @@ notes(s, 'Рекомендованный стек — Node/Express; замени
 // 5. Архитектура
 s = pres.addSlide({ masterName: 'CONTENT', sectionTitle: 'Разработка' })
 title(s, 'Архитектура: монолит со строгими слоями')
-const box = (t, x, y, w, col, name) => s.addText(t, { x, y, w, h: 0.8, fontSize: 15, bold: true, color: C.background1, fill: { color: col }, align: 'center', valign: 'middle', shape: pres.shapes.ROUNDED_RECTANGLE, rectRadius: 0.08, isTextBox: true, objectName: name })
+const box = (t, x, y, w, col, name, h = 0.8) => s.addText(t, { x, y, w, h, fontSize: 15, bold: true, color: C.background1, fill: { color: col }, align: 'center', valign: 'middle', shape: pres.shapes.ROUNDED_RECTANGLE, rectRadius: 0.08, isTextBox: true, objectName: name })
 const arrow = (x1, y1, x2, y2, name) => s.addShape(pres.shapes.LINE, { x: x1, y: y1, w: x2 - x1, h: y2 - y1, line: { color: '6B7785', width: 1.5, endArrowType: 'triangle' }, objectName: name })
 box('Браузер: React SPA', M, 1.7, 2.6, C.text2, 'arch-browser')
 box('Nginx: TLS, статика, прокси', M + 3.3, 1.7, 3.0, C.text2, 'arch-nginx')
 arrow(M + 2.6, 2.1, M + 3.3, 2.1, 'arch-a1')
-s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: M + 7.0, y: 1.4, w: 5.1, h: 3.4, rectRadius: 0.08, fill: { color: C.background2 }, line: { color: 'D5DEE3' }, objectName: 'arch-go' })
+s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: M + 7.0, y: 1.4, w: 5.1, h: 3.75, rectRadius: 0.08, fill: { color: C.background2 }, line: { color: 'D5DEE3' }, objectName: 'arch-go' })
 s.addText('Сервер на Go', { x: M + 7.2, y: 1.5, w: 4.7, h: 0.4, fontSize: 14, bold: true, color: C.text2, margin: 0, isTextBox: true, objectName: 'arch-go-title' })
 ;['HTTP: контроллеры, валидация по OpenAPI', 'Сервисы: права, WIP-лимиты, история', 'Репозиторий: запросы sqlc', 'WebSocket-хаб'].forEach((t, i) =>
-  box(t, M + 7.2, 2.0 + i * 0.68, 4.7, i === 3 ? C.accent2 : C.accent1, `arch-layer-${i}`))
+  box(t, M + 7.2, 2.0 + i * 0.75, 4.7, i === 3 ? C.accent2 : C.accent1, `arch-layer-${i}`, 0.6))
 arrow(M + 6.3, 2.1, M + 7.0, 2.1, 'arch-a2')
-box('PostgreSQL', M + 7.0, 5.4, 2.4, C.accent4, 'arch-pg')
-box('Redis', M + 9.7, 5.4, 2.4, C.accent3, 'arch-redis')
-box('Prometheus → Grafana', M, 5.4, 3.0, C.accent6, 'arch-prom')
+box('PostgreSQL', M + 7.0, 5.6, 2.4, C.accent4, 'arch-pg')
+box('Redis', M + 9.7, 5.6, 2.4, C.accent3, 'arch-redis')
+box('Prometheus → Grafana', M, 5.6, 3.0, C.accent6, 'arch-prom')
 s.addText('Изменения доски рассылаются через Redis pub/sub всем экземплярам сервера, а оттуда — браузерам по WebSocket', { x: M, y: 3.2, w: 6.1, h: 1.2, fontSize: 14, color: '3E4C59', margin: 0, isTextBox: true, objectName: 'arch-note' })
 notes(s, 'Зависимости только вниз: контроллер → сервис → репозиторий. Схема — docs/architecture.md.')
 
@@ -183,7 +183,7 @@ title(s, 'Три решения, которые проверялись тест�
   ['WIP-лимит без гонок', C.accent2, 'Перемещение блокирует строку колонки (SELECT … FOR UPDATE) и только потом считает карточки. 10 параллельных запросов в колонку с лимитом 1 — проходит ровно один.'],
   ['Порядок без перенумерации', C.accent1, 'Позиция — дробное число между соседями: перемещение меняет одну строку. Когда промежуток исчерпан, колонка перенумеровывается.'],
   ['Сессия без XSS и CSRF', C.accent4, 'Access JWT живёт 15 минут в памяти. Refresh-токен в httpOnly-cookie меняется при каждом обновлении; повторное предъявление отзывает всю цепочку.'],
-].forEach(([head, col, body], i) => card(s, { x: M + i * 4.1, y: 1.6, w: 3.85, h: 4.6, chip: head, chipColor: col, body, bodySize: 16, name: `decision-${i}` }))
+].forEach(([head, col, body], i) => card(s, { x: M + i * 4.1, y: 1.8, w: 3.85, h: 3.6, chip: head, chipColor: col, body, bodySize: 16, name: `decision-${i}` }))
 notes(s, 'Каждое решение покрыто интеграционным тестом: TestWipLimitUnderConcurrency, TestCardRenumbering, TestRefreshTokenReuseRevokesSession.')
 
 // 8. Пирамида
@@ -193,7 +193,7 @@ title(s, `${DATA.totalAutomated} автотестов на всех уровня
 const levels = DATA.levels
 levels.forEach((lv, i) => {
   const w = 3.2 + i * 1.3
-  const x = (W - w) / 2 - 2.2
+  const x = M + (8.4 - w) / 2 // ярусы центрированы в левой части, справа — список инструментов
   s.addText(`${lv.label}: ${lv.count}`, { x, y: 1.45 + i * 0.82, w, h: 0.7, fontSize: 16, bold: true, color: C.background1, fill: { color: lv.color === 'accent2' ? HEX.accent2 : HEX[lv.color] }, align: 'center', valign: 'middle', isTextBox: true, objectName: `level-${i}` })
 })
 s.addText(bullets(DATA.tools), { x: 9.2, y: 1.5, w: 3.6, h: 4.8, fontSize: 14, color: C.text1, paraSpaceAfter: 6, isTextBox: true, objectName: 'tools' })

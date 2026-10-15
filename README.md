@@ -19,6 +19,7 @@ Kanban-доска (аналог Jira) с полным циклом тестир�
 | [docs/usability-checklist.md](docs/usability-checklist.md) | чек-лист юзабилити |
 | [docs/test-report.md](docs/test-report.md) | отчёт о тестировании |
 | [docs/deployment.md](docs/deployment.md) | подготовка VPS и деплой |
+| [docs/presentation/kanban-lab.pptx](docs/presentation/kanban-lab.pptx) | презентация к защите (собирается `node docs/presentation/build.js`, снимки экрана — `SHOTS=1 npx playwright test zz-screenshots` в `e2e/`) |
 
 ## Возможности
 
