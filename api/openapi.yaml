@@ -1256,6 +1256,7 @@ components:
 
     RegisterRequest:
       type: object
+      additionalProperties: false
       required: [email, password, name]
       properties:
         email:
@@ -1273,6 +1274,7 @@ components:
 
     LoginRequest:
       type: object
+      additionalProperties: false
       required: [email, password]
       properties:
         email:
@@ -1298,6 +1300,7 @@ components:
 
     SetRoleRequest:
       type: object
+      additionalProperties: false
       required: [role]
       properties:
         role:
@@ -1329,6 +1332,7 @@ components:
 
     ProjectInput:
       type: object
+      additionalProperties: false
       required: [key, name]
       properties:
         key:
@@ -1345,6 +1349,7 @@ components:
 
     ProjectPatch:
       type: object
+      additionalProperties: false
       minProperties: 1
       properties:
         name:
@@ -1357,6 +1362,7 @@ components:
 
     AddMemberRequest:
       type: object
+      additionalProperties: false
       required: [userId]
       properties:
         userId:
@@ -1395,6 +1401,7 @@ components:
 
     BoardInput:
       type: object
+      additionalProperties: false
       required: [name]
       properties:
         name:
@@ -1427,6 +1434,7 @@ components:
 
     ColumnInput:
       type: object
+      additionalProperties: false
       required: [name]
       properties:
         name:
@@ -1441,6 +1449,7 @@ components:
 
     ColumnPatch:
       type: object
+      additionalProperties: false
       minProperties: 1
       properties:
         name:
@@ -1455,6 +1464,7 @@ components:
 
     MoveColumnRequest:
       type: object
+      additionalProperties: false
       properties:
         afterColumnId:
           type: string
@@ -1480,6 +1490,7 @@ components:
 
     LabelInput:
       type: object
+      additionalProperties: false
       required: [name, color]
       properties:
         name:
@@ -1492,6 +1503,7 @@ components:
 
     LabelPatch:
       type: object
+      additionalProperties: false
       minProperties: 1
       properties:
         name:
@@ -1581,6 +1593,7 @@ components:
 
     CardInput:
       type: object
+      additionalProperties: false
       required: [title]
       properties:
         title:
@@ -1609,6 +1622,7 @@ components:
 
     CardPatch:
       type: object
+      additionalProperties: false
       minProperties: 1
       properties:
         title:
@@ -1637,6 +1651,7 @@ components:
 
     MoveCardRequest:
       type: object
+      additionalProperties: false
       required: [columnId]
       properties:
         columnId:
@@ -1672,6 +1687,7 @@ components:
 
     CommentInput:
       type: object
+      additionalProperties: false
       required: [body]
       properties:
         body:

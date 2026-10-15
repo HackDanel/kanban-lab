@@ -1,0 +1,10 @@
+package: api
+output: api.gen.go
+generate:
+  models: true
+  chi-server: true
+  strict-server: true
+  embedded-spec: true
+output-options:
+  # nullable.Nullable[T] distinguishes an absent field from an explicit null in PATCH bodies
+  nullable-type: true

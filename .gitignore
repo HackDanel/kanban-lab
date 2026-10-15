@@ -7,7 +7,7 @@
 backend/bin/
 backend/tmp/
 *.test
-coverage.out
+backend/coverage.*
 coverage.html
 gobco*.json
 
