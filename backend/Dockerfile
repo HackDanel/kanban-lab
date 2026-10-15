@@ -7,9 +7,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+# The runtime image has no shell, so the upload directory is prepared here.
+# A fresh named volume copies this directory, ownership included.
+RUN mkdir -p /out/data/uploads
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/server /server
+COPY --from=build --chown=65532:65532 /out/data /data
 USER nonroot:nonroot
 ENV HTTP_ADDR=:8080 UPLOAD_DIR=/data/uploads
 EXPOSE 8080
