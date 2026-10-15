@@ -189,6 +189,7 @@ describe('CardDialog', () => {
     const confirm = screen.getAllByRole('dialog').at(-1)!
     await user.click(within(confirm).getByRole('button', { name: 'Удалить' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.queryByText('Reports')).not.toBeInTheDocument()
+    // список карточек перезапрашивается после закрытия диалога
+    await waitFor(() => expect(screen.queryByText('Reports')).not.toBeInTheDocument())
   })
 })
